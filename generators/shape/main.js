@@ -21,6 +21,7 @@ type = typeinput.options[typeinput.selectedIndex].text;
 
 typeinput.onchange = function(event) {
     type = typeinput.options[typeinput.selectedIndex].text;
+    console.log(type);
 }
 hinput.oninput = function(event) {
     generateShape(type, hinput.value, winput.value);

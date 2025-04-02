@@ -37,7 +37,7 @@ function block(height, width, colors) {
         closePath: true
         };
 }
-function hat(height, width) {
+function hat(height, width, colors) {
     const dHeight = height * 8;
     const dWidth = width * 15;
     return {
@@ -58,7 +58,9 @@ function hat(height, width) {
         closePath: true
         };
 }
-function end(height, width) {
+function end(height, width, colors) {
+    const dHeight = height * 8;
+    const dWidth = width * 15;
     return {
         points: [
         {x: 0, y: 0, cornerRadius: 0.5},
