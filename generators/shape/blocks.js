@@ -23,10 +23,10 @@ function block(height, width, colors) {
     return {
         points: [
         {x: 0, y: 0, cornerRadius: 0.5},
-        ...notch(0, 0, false),
+        ...notch(0, 0, true),
         {x: dWidth, y: 0, cornerRadius: 2},
         {x: dWidth, y: dHeight, cornerRadius: 2},
-        ...notch(0, dHeight, true),
+        ...notch(0, dHeight, false),
         {x: 0, y: dHeight, cornerRadius: 0.5}
         ],
         fill: colors.inner,
@@ -47,7 +47,7 @@ function hat(height, width, colors) {
         {x: 10, y: 0, cornerRadius: 0.25},
         {x: dWidth, y: 0, cornerRadius: 2},
         {x: dWidth, y: dHeight, cornerRadius: 2},
-        ...notch(0, dHeight, true),
+        ...notch(0, dHeight, false),
         {x: 0, y: dHeight, cornerRadius: 0.5}
         ],
         fill: colors.inner,
@@ -63,7 +63,7 @@ function end(height, width, colors) {
     return {
         points: [
         {x: 0, y: 0, cornerRadius: 0.5},
-        ...notch(0, 0, false),
+        ...notch(0, 0, true),
         {x: dWidth, y: 0, cornerRadius: 2},
         {x: dWidth, y: dHeight, cornerRadius: 2},
         {x: 0, y: dHeight, cornerRadius: 2}
