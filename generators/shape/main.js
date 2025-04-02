@@ -44,3 +44,33 @@ winput.oninput = function(event) {
     generateShape(type, hinput.value, winput.value);
 };
 generateShape(type, hinput.value, winput.value);
+
+
+
+let isDragging = false;
+let offset = { x: 0, y: 0 };
+
+// When the user starts dragging the circle
+circle.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    // Calculate the difference between mouse position and circle's center
+    const cx = parseFloat(testELM.getAttribute('cx'));
+    const cy = parseFloat(testELM.getAttribute('cy'));
+    offset.x = e.clientX - cx;
+    offset.y = e.clientY - cy;
+});
+
+// When the user moves the mouse, update the circle's position if dragging
+document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    // New center position for the circle
+    const newX = e.clientX - offset.x;
+    const newY = e.clientY - offset.y;
+    testELM.setAttribute('cx', newX);
+    testELM.setAttribute('cy', newY);
+});
+
+// When the user releases the mouse button, stop dragging
+document.addEventListener('mouseup', () => {
+    isDragging = false;
+});
