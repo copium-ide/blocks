@@ -7,6 +7,7 @@ testELM.id = 'testELM';
 document.body.appendChild(testELM);
 
 function generateShape(type, h, w) {
+    var innerC, outerC;
     if (type === 'block') {
         innerC = "#FF0000";
         outerC = "#000000";
