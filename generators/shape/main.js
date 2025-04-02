@@ -17,10 +17,10 @@ var typeinput = document.getElementById("type");
 hinput.value = 1;
 winput.value = 1;
 typeinput.value = 'block';
-type = typeinput.value;
+type = typeinput.innerText;
 
 typeinput.oninput = function(event) {
-    type = typeinput.value;
+    type = typeinput.innerText;
 }
 hinput.oninput = function(event) {
     generateShape(type, hinput.value, winput.value);
