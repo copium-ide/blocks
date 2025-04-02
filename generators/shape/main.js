@@ -1,0 +1,24 @@
+import * as blocks from './blocks.js';
+import * as inputs from './inputs.js';
+import * as svg from './svg.js';
+
+const testELM = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
+testELM.id = 'testELM';
+document.body.appendChild(testELM);
+
+function generateShape(type, h, w) {
+    svg.generate(blocks.generate(type, { inner: '#ffffff', outer: '#000000' }, h, w), document.getElementById('testELM'));
+}
+
+var hinput = document.getElementById("h");
+var winput = document.getElementById("w");
+
+hinput.value = 1;
+winput.value = 1;
+hinput.oninput = function(event) {
+    generateShape('block', hinput.value, winput.value);
+};
+winput.oninput = function(event) {
+    generateShape('block', hinput.value, winput.value);
+};
+generateShape('block', hinput.value, winput.value);
