@@ -31,7 +31,7 @@ var typeinput = document.getElementById("type");
 hinput.value = 1;
 winput.value = 1;
 typeinput.value = 'block';
-type = typeinput.options[typeinput.selectedIndex].text;
+var type = typeinput.options[typeinput.selectedIndex].text;
 
 typeinput.onchange = function(event) {
     type = typeinput.options[typeinput.selectedIndex].text;
