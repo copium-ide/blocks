@@ -12,13 +12,20 @@ function generateShape(type, h, w) {
 
 var hinput = document.getElementById("h");
 var winput = document.getElementById("w");
+var typeinput = document.getElementById("type");
 
 hinput.value = 1;
 winput.value = 1;
+typeinput.value = 'block';
+type = typeinput.value;
+
+typeinput.oninput = function(event) {
+    type = typeinput.value;
+}
 hinput.oninput = function(event) {
-    generateShape('block', hinput.value, winput.value);
+    generateShape(type, hinput.value, winput.value);
 };
 winput.oninput = function(event) {
-    generateShape('block', hinput.value, winput.value);
+    generateShape(type, hinput.value, winput.value);
 };
-generateShape('block', hinput.value, winput.value);
+generateShape(type, hinput.value, winput.value);
