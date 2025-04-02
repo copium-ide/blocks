@@ -51,7 +51,7 @@ let isDragging = false;
 let offset = { x: 0, y: 0 };
 
 // When the user starts dragging the circle
-circle.addEventListener('mousedown', (e) => {
+testELM.addEventListener('mousedown', (e) => {
     isDragging = true;
     // Calculate the difference between mouse position and circle's center
     const cx = parseFloat(testELM.getAttribute('cx'));
