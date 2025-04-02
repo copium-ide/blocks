@@ -7,7 +7,20 @@ testELM.id = 'testELM';
 document.body.appendChild(testELM);
 
 function generateShape(type, h, w) {
-    svg.generate(blocks.generate(type, { inner: '#ffffff', outer: '#000000' }, h, w), document.getElementById('testELM'));
+    if (type === 'block') {
+        innerC = "#FF0000";
+        outerC = "#000000";
+    } else if (type === 'hat') {
+        innerC = "#00FF00";
+        outerC = "#000000";
+    } else if (type === 'end') {
+        innerC = "#0000FF";
+        outerC = "#000000";
+    } else {
+        innerC = "#FFFFFF";
+        outerC = "#000000";
+    }
+    svg.generate(blocks.generate(type, { inner: innerC, outer: outerC }, h, w), document.getElementById('testELM'));
 }
 
 var hinput = document.getElementById("h");
