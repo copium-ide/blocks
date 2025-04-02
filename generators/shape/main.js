@@ -11,17 +11,20 @@ function generateShape(type, h, w) {
     if (type === 'block') {
         innerC = "#FF0000";
         outerC = "#000000";
+        svg.generate(blocks.Block({ inner: innerC, outer: outerC }, h, w), document.getElementById('testELM'));
     } else if (type === 'hat') {
         innerC = "#00FF00";
         outerC = "#000000";
+        svg.generate(blocks.Hat({ inner: innerC, outer: outerC }, h, w), document.getElementById('testELM'));
     } else if (type === 'end') {
         innerC = "#0000FF";
         outerC = "#000000";
+        svg.generate(blocks.End({ inner: innerC, outer: outerC }, h, w), document.getElementById('testELM'));
     } else {
         innerC = "#FFFFFF";
         outerC = "#000000";
     }
-    svg.generate(blocks.generate(type, { inner: innerC, outer: outerC }, h, w), document.getElementById('testELM'));
+    
 }
 
 var hinput = document.getElementById("h");

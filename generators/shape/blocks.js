@@ -1,25 +1,6 @@
-export function generate(type, colors, height, width) {
-    if (type === 'block') {
-        return block(height, width, colors);
-    } else if (type === 'hat') {
-        return hat(height, width, colors);
-    } else if (type === 'end') {
-        return end(height, width, colors);
-    } else if (type === 'loop') {
-        
-    } else {
-        console.error(`Unknown type: ${type}`);
-        return {};
-    }
-}
-
-
-
-
-
-function block(height, width, colors) {
-    const dHeight = height * 8;
-    const dWidth = width * 15;
+export function Block(colors, height, width) {
+    const dHeight = height * 6;
+    const dWidth = width * 10;
     return {
         points: [
         {x: 0, y: 0, cornerRadius: 0.5},
@@ -36,37 +17,17 @@ function block(height, width, colors) {
         closePath: true
         };
 }
-function hat(height, width, colors) {
-    const dHeight = height * BLOCK_HEIGHT;
-    const dWidth = width * BLOCK_WIDTH;
+export function Hat(colors, height, width) {
+    const dHeight = height * 6;
+    const dWidth = width * 10;
     return {
         points: [
-        {x: 0, y: 0, cornerRadius: 0.25},
-        {x: 3, y: -2, cornerRadius: 2},
-        {x: 7, y: -2, cornerRadius: 2},
-        {x: 10, y: 0, cornerRadius: 0.25},
+        {x: 0, y: 0, cornerRadius: 0.5},
+        ...hat(0, 0, true),
         {x: dWidth, y: 0, cornerRadius: 2},
         {x: dWidth, y: dHeight, cornerRadius: 2},
         ...notch(0, dHeight, false),
         {x: 0, y: dHeight, cornerRadius: 0.5}
-        ],
-        fill: colors.inner,
-        stroke: colors.outer,
-        strokeWidth: 0.1,
-        strokeLinejoin: "round",
-        closePath: true
-        };
-}
-function end(height, width, colors) {
-    const dHeight = height * 8;
-    const dWidth = width * 15;
-    return {
-        points: [
-        {x: 0, y: 0, cornerRadius: 0.5},
-        ...notch(0, 0, true),
-        {x: dWidth, y: 0, cornerRadius: 2},
-        {x: dWidth, y: dHeight, cornerRadius: 2},
-        {x: 0, y: dHeight, cornerRadius: 2}
         ],
         fill: colors.inner,
         stroke: colors.outer,
@@ -75,16 +36,23 @@ function end(height, width, colors) {
         closePath: true
         };
 }
-function loop(upperHeight, upperWidth, lowerHeight, lowerWidth, innerHeight) {
+export function End(colors, height, width) {
+    const dHeight = height * 6;
+    const dWidth = width * 10;
     return {
-        type: 'loop',
         points: [
-            { x: 0, y: 0, cornerRadius: 0 },
-            { x: 100, y: 0, cornerRadius: 0 },
-            { x: 100, y: -50, cornerRadius: 0 },
-            { x: 0, y: -50, cornerRadius: 0 }
-        ]
-    };
+        {x: 0, y: 0, cornerRadius: 0.5},
+        ...notch(0, 0, true),
+        {x: dWidth, y: 0, cornerRadius: 2},
+        {x: dWidth, y: dHeight, cornerRadius: 2},
+        {x: 0, y: dHeight, cornerRadius: 0.5}
+        ],
+        fill: colors.inner,
+        stroke: colors.outer,
+        strokeWidth: 0.5,
+        strokeLinejoin: "round",
+        closePath: true
+        };
 }
 
 // block components                 ----------------------BLOCK COMPONENTS----------------------
@@ -111,4 +79,13 @@ function notch(x = 0, y = 0, inverted = false) {
             {x: 2+x, y: 0+y, cornerRadius: CORNER_RADIUS}
         ];
     }
+}
+
+function hat(x = 0, y = 0) {
+    return [
+        {x: 2+x, y: 0+y, cornerRadius: CORNER_RADIUS},
+        {x: 3+x, y: -1-y, cornerRadius: 5},
+        {x: 7+x, y: -1-y, cornerRadius: 5},
+        {x: 8+x, y: 0+y, cornerRadius: CORNER_RADIUS}
+    ];
 }
