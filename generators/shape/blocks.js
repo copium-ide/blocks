@@ -38,11 +38,14 @@ function block(height, width, colors) {
         };
 }
 function hat(height, width, colors) {
-    const dHeight = height * 8;
-    const dWidth = width * 15;
+    const dHeight = height * 6;
+    const dWidth = width * 11;
     return {
         points: [
         {x: 0, y: 0, cornerRadius: 2},
+        {x: 3, y: -2, cornerRadius: 4},
+        {x: 7, y: -2, cornerRadius: 4},
+        {x: 10, y: 0, cornerRadius: 2},
         {x: dWidth, y: 0, cornerRadius: 2},
         {x: dWidth, y: dHeight, cornerRadius: 2},
         {x: 4.75, y: dHeight, cornerRadius: 0.25},
