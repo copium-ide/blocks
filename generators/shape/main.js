@@ -19,7 +19,7 @@ winput.value = 1;
 typeinput.value = 'block';
 type = typeinput.value;
 
-typeinput.oninput = function(event) {
+typeinput.onchange = function(event) {
     type = typeinput.value;
 }
 hinput.oninput = function(event) {

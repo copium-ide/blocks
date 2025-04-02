@@ -2,9 +2,9 @@ export function generate(type, colors, height, width) {
     if (type === 'block') {
         return block(height, width, colors);
     } else if (type === 'hat') {
-        
+        return hat(height, width, colors);
     } else if (type === 'end') {
-
+        return end(height, width, colors);
     } else if (type === 'loop') {
         
     } else {
