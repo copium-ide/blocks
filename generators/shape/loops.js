@@ -1,6 +1,6 @@
 import * as components from './components.js';
 
-export function Block(colors, height, width) {
+export function Branch(colors, height, width) {
     const dHeight = height * components.BLOCK_HEIGHT;
     const dWidth = width * components.BLOCK_WIDTH;
     return {
@@ -19,7 +19,7 @@ export function Block(colors, height, width) {
         closePath: true
         };
 }
-export function Hat(colors, height, width) {
+export function Wrap(colors, height, width) {
     const dHeight = height * components.BLOCK_HEIGHT;
     const dWidth = width * components.BLOCK_WIDTH;
     return {
@@ -38,7 +38,7 @@ export function Hat(colors, height, width) {
         closePath: true
         };
 }
-export function End(colors, height, width) {
+export function Loop(colors, height, width) {
     const dHeight = height * components.BLOCK_HEIGHT;
     const dWidth = width * components.BLOCK_WIDTH;
     return {
