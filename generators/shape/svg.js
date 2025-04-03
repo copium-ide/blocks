@@ -86,5 +86,6 @@ export function generate(shapeData, svgElement) {
         maxY = Math.max(maxY, pt.y);
     }
     const padding = 2;
-    svgElement.setAttribute('viewBox', `${minX - padding} ${minY - padding} ${maxX - minX + 2 * padding} ${maxY - minY + 2 * padding}`);
+    svgElement.setAttribute('viewBox', `${minX - padding} ${minY - padding} ${maxX - minX * padding} ${maxY - minY * padding}`);
+    svgElement.setAttribute('height', '50px');
 }
