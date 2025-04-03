@@ -6,9 +6,9 @@ import * as svg from './generators/shape/svg.js';
 
 const testELM = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
 testELM.id = 'testELM';
-document.body.appendChild(testELM);
+document.getElementById('svg container').appendChild(testELM);
 
-var draggable = new PlainDraggable(document.getElementById('testELM'));
+var draggable = new PlainDraggable(document.getElementById('svg container'));
 
 function generateShape(type, h, w) {
     var innerC, outerC;
