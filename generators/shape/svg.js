@@ -89,4 +89,5 @@ export function generate(shapeData, svgElement) {
     svgElement.style.setProperty('width', `${(maxX - minX) * 10}px`);
     svgElement.style.setProperty('height', `${(maxY - minY) * 10}px`);
     svgElement.style.setProperty('position', `absolute`);
+    svgElement.style.setProperty('overflow', `visible`);
 }
