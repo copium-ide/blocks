@@ -9,7 +9,7 @@ const testELM = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
 testELM.id = 'testELM';
 document.body.appendChild(testELM);
 
-var draggable = new PlainDraggable(document.getElementById('testELM'));
+var draggable = new drag.PlainDraggable(document.getElementById('testELM'));
 
 function generateShape(type, h, w) {
     var innerC, outerC;
