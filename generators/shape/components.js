@@ -7,10 +7,13 @@ export const LOOP_OFFSET = 2;
 export const STROKE_WIDTH = 0.25;
 
 export function branch(colors, sizes, top, bottom) {
-    const finalShape = { 
-      points: [],
-      ...footer(colors),
-    };
+    const finalShape = {points: [], ...footer(colors)};
+    if (sizes.length === 1) {
+        finalShape.points.push(
+            {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
+            ...notch(0, 0, true),
+        );
+    }
     let finalOffset = 0;
   
     for (let i = 0; i < sizes.length-1; i++) {
