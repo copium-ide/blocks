@@ -4,7 +4,7 @@ export const BLOCK_WIDTH = 10;
 export const CORNER_RADIUS = 0.75;
 export const NOTCH_RADIUS = 0.25;
 export const LOOP_OFFSET = 2;
-export const STROKE_WIDTH = 0.1;
+export const STROKE_WIDTH = 0.25;
 
 export function notch(x = 0, y = 0, inverted = false) {
     if (inverted == true) {
