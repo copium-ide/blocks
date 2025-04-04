@@ -86,7 +86,8 @@ export function branch(colors, sizes, top, bottom) {
         ];
     } else if (bottom === 'flat') {
         lastShape = [
-            {x: 0, y: 0 + finalOffset, cornerRadius: CORNER_RADIUS},
+            ...block(finalOffset, dWidth, dHeight),
+            {x: 0, y: 0 + finalOffset+dHeight, cornerRadius: CORNER_RADIUS},
         ];
     }
     finalShape.points.push(...lastShape);
