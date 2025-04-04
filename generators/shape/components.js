@@ -8,11 +8,23 @@ export const STROKE_WIDTH = 0.25;
 
 export function branch(colors, sizes, top, bottom) {
     const finalShape = {points: [], ...footer(colors)};
+    console.log(top, bottom);
     if (sizes.length === 1) {
-        finalShape.points.push(
-            {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
-            ...notch(0, 0, true),
-        );
+        if (top === 'notch') {
+            finalShape.points.push(
+                {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
+                ...notch(0, 0, true),
+            );
+        } else if (top === 'hat') {
+            finalShape.points.push(
+                {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
+                ...hat(0, 0),
+            );
+        } else if (top === 'flat') {
+            finalShape.points.push(
+                {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
+            );
+        }
     }
     let finalOffset = 0;
   
@@ -39,16 +51,16 @@ export function branch(colors, sizes, top, bottom) {
         } else if (top === 'hat') {
             shape = [
                 {x: 0, y: 0 + offset, cornerRadius: CORNER_RADIUS},
-                ...hat(0, 0 + offset),
-                ...loop(0 + offset+dHeight, bHeight),
+                ...hat(0, 0 + offset, true),
                 ...block(0, dWidth, dHeight),
+                ...loop(0 + offset+dHeight, bHeight),
                 
               ];
         } else if (top === 'flat') {
             shape = [
                 {x: 0, y: 0 + offset, cornerRadius: CORNER_RADIUS},
-                ...loop(0 + offset+dHeight, bHeight),
                 ...block(0, dWidth, dHeight),
+                ...loop(0 + offset+dHeight, bHeight),
                 
               ];
         }
