@@ -1,5 +1,4 @@
 import * as blocks from './generators/shape/blocks.js';
-import * as inputs from './generators/shape/inputs.js';
 import * as svg from './generators/shape/svg.js';
 
 var workSpace = {};

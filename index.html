@@ -31,32 +31,37 @@
   </style>
 </head>
 <body>
-  <div id="controls">
-    <label>h:</label>
-    <input id="h" type="range" min="0" max="2" step="0.1" value="1" />
+    <div id="controls">
+        <label>h:</label>
+        <input id="h" type="range" min="0" max="2" step="0.1" value="1" />
   
-    <label>w:</label>
-    <input id="w" type="range" min="0" max="2" step="0.1" value="1" />
-    <br />
-    <label>colors:</label>
-    <input id="color1" type="text" value="#ffffff" />
-    <input id="color2" type="text" value="#000000" />
-    <label>type:</label>
-    <select id="type">
-      <option value="block">block</option>
-      <option value="hat">hat</option>
-      <option value="end">end</option>
-    </select>
-    <select id="blockType"></select>
-    <input id="create" type="button" value="create" />
-    <input id="remove" type="button" value="remove" />
-    <button id="addBranch">Add Branch</button>
-  </div>
+        <label>w:</label>
+        <input id="w" type="range" min="0" max="2" step="0.1" value="1" />
+        <br />
+        <label>colors:</label>
+        <input id="color1" type="text" value="#ffffff" />
+        <input id="color2" type="text" value="#000000" />
+        <label>type:</label>
+        <select id="type">
+            <option value="block">block</option>
+            <option value="hat">hat</option>
+            <option value="end">end</option>
+            <option value="string">string</option>
+            <option value="number">number</option>
+            <option value="boolean">boolean</option>
+            <option value="array">array</option>
+            <option value="object">object</option>
+        </select>
+        <select id="blockType"></select>
+        <input id="create" type="button" value="create" />
+        <input id="remove" type="button" value="remove" />
+        <button id="addBranch">Add Branch</button>
+    </div>
 
-  <!-- Container for dynamic branch sliders -->
-  <div id="sliders"></div>
+    <!-- Container for dynamic branch sliders -->
+    <div id="sliders"></div>
   
-  <script src="./snapping/plain-draggable.js"></script>
-  <script type="module" src="./main.js"></script>
+    <script src="./snapping/plain-draggable.js"></script>
+    <script content="text/javascript" type="module" src="./main.js"></script>
 </body>
 </html>
