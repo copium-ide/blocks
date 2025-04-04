@@ -1,5 +1,4 @@
 import * as blocks from './generators/shape/blocks.js';
-import * as loops from './generators/shape/loops.js';
 import * as inputs from './generators/shape/inputs.js';
 import * as svg from './generators/shape/svg.js';
 
@@ -83,13 +82,27 @@ function getBlock(uuid, parameter) {
 
 function generateShape(uuid, type, colors, h, w) {
     if (type === 'block') {
-        svg.generate(blocks.Block({ inner: colors.inner, outer: colors.outer }, h, w), document.getElementById(uuid));
+        svg.generate(blocks.Block(colors, h, w), document.getElementById(uuid));
     } else if (type === 'hat') {
-        svg.generate(blocks.Hat({ inner: colors.inner, outer: colors.outer }, h, w), document.getElementById(uuid));
+        svg.generate(blocks.Hat(colors, h, w), document.getElementById(uuid));
     } else if (type === 'end') {
-        svg.generate(blocks.End({ inner: colors.inner, outer: colors.outer }, h, w), document.getElementById(uuid));
-    } else {
-        return;
+        svg.generate(blocks.End(colors, h, w), document.getElementById(uuid));
+    } else if (type === 'loop') {
+          
+        const sizes = [
+            {
+                width: 4,
+                height: 2,
+                loop: { height: 1 }
+            },
+            {
+                width: 4,
+                height: 3,
+                loop: { height: 1 }
+            }
+        ];
+          
+        svg.generate(blocks.Loop(colors, sizes), document.getElementById(uuid));
     }
 }
 
