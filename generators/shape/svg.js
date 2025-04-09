@@ -123,11 +123,10 @@ export function generate(shapeData, svgElement) {
 
     // Adjust viewBox and dimensions to account for stroke width if provided
     const strokeWidth = shapeData.strokeWidth !== undefined ? Number(shapeData.strokeWidth) : 0;
-    const halfStroke = strokeWidth / 2;
-    const viewBoxX = minX - halfStroke;
-    const viewBoxY = minY - halfStroke;
-    const viewBoxWidth = (maxX - minX) + strokeWidth;
-    const viewBoxHeight = (maxY - minY) + strokeWidth;
+    const viewBoxX = minX;
+    const viewBoxY = minY;
+    const viewBoxWidth = (maxX - minX);
+    const viewBoxHeight = (maxY - minY);
     const zoom = 1;
 
     svgElement.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
