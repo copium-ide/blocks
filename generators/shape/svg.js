@@ -112,21 +112,11 @@ export function generate(shapeData, svgElement) {
 
     svgElement.appendChild(path);
 
-    // Calculate bounding box of the shape points
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const pt of points) {
-        minX = Math.min(minX, pt.x);
-        minY = Math.min(minY, pt.y);
-        maxX = Math.max(maxX, pt.x);
-        maxY = Math.max(maxY, pt.y);
-    }
-
-    // Adjust viewBox and dimensions to account for stroke width if provided
-    const strokeWidth = shapeData.strokeWidth !== undefined ? Number(shapeData.strokeWidth) : 0;
-    const viewBoxX = minX;
-    const viewBoxY = minY;
-    const viewBoxWidth = (maxX - minX);
-    const viewBoxHeight = (maxY - minY);
+    const bBox = svgElement.getBBox()
+    const viewBoxX = bBox.x;
+    const viewBoxY = bBox.y;
+    const viewBoxWidth = bBox.width;
+    const viewBoxHeight = bBox.height;
     const zoom = 10;
 
     svgElement.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
