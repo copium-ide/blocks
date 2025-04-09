@@ -128,10 +128,11 @@ export function generate(shapeData, svgElement) {
     const viewBoxY = minY - halfStroke;
     const viewBoxWidth = (maxX - minX) + strokeWidth;
     const viewBoxHeight = (maxY - minY) + strokeWidth;
+    const zoom = 1;
 
     svgElement.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
-    svgElement.style.setProperty('width', `${viewBoxWidth}%`);
-    svgElement.style.setProperty('height', `${viewBoxHeight}%`);
+    svgElement.style.setProperty('width', `${viewBoxWidth*zoom}%`);
+    svgElement.style.setProperty('height', `${viewBoxHeight*zoom}%`);
     svgElement.style.setProperty('position', `absolute`);
     svgElement.style.setProperty('overflow', `visible`);
 }
