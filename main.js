@@ -25,8 +25,8 @@ function createBlock(type, colors = { inner: "#FFFFFF", outer: "#000000" }) {
     blockELM.setAttribute("blocktype", type);
     document.body.appendChild(blockELM);
     generateShape(uuid, type, colors, sizes);
-    drag.makeDraggable(document.getElementById(uuid), document.getElementById(uuid));
-    // new PlainDraggable(document.getElementById(uuid), { leftTop: true });
+    // drag.makeDraggable(document.getElementById(uuid), document.getElementById(uuid));
+    new PlainDraggable(document.getElementById(uuid), { leftTop: true });
 
     populateSelector(blockSpace);
     // Automatically switch the selector to the new block
