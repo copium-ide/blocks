@@ -22,8 +22,7 @@ export function makeDraggable(element, handle) {
   function drag(e) {
     if (!isDragging) return;
     element.style.position = 'absolute';
-    element.style.left = `${e.clientX - offsetX}px`;
-    element.style.top = `${e.clientY - offsetY}px`;
+    element.style.transform = `translate(${e.clientX - offsetX}px, ${e.clientY - offsetY}px)`;
   }
   
   function stopDrag() {
