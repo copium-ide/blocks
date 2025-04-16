@@ -6,6 +6,11 @@ export var PlainDraggable=function(t){var e={};function n(r){if(e[r])return e[r]
 export function makeDraggable(svgElement) {
   let isDragging = false;
   let offsetX, offsetY;
+    
+  // Initialize the transform attribute if it's not already set
+    if (!svgElement.getAttribute('transform')) {
+        svgElement.setAttribute('transform', 'translate(0,0)');
+    }
 
   svgElement.addEventListener('mousedown', startDrag);
   svgElement.addEventListener('mousemove', drag);
@@ -13,9 +18,18 @@ export function makeDraggable(svgElement) {
   svgElement.addEventListener('mouseleave', endDrag);
 
   function startDrag(event) {
-    isDragging = true;
-    offsetX = event.clientX - svgElement.x.baseVal.value;
-    offsetY = event.clientY - svgElement.y.baseVal.value;
+      isDragging = true;
+      
+       // Get current translation values from transform
+        const transform = svgElement.transform.baseVal.consolidate();
+        let currentX = 0, currentY = 0;
+        if(transform){
+            currentX = transform.matrix.e;
+            currentY = transform.matrix.f;
+        }
+       
+      offsetX = event.clientX - currentX;
+      offsetY = event.clientY - currentY;
     svgElement.classList.add('active');
   }
 
@@ -23,9 +37,8 @@ export function makeDraggable(svgElement) {
     if (isDragging) {
       let x = event.clientX - offsetX;
       let y = event.clientY - offsetY;
-
-      svgElement.x.baseVal.value = x;
-      svgElement.y.baseVal.value = y;
+        
+        svgElement.setAttribute('transform', `translate(${x}, ${y})`);
     }
   }
 
@@ -33,4 +46,5 @@ export function makeDraggable(svgElement) {
     isDragging = false;
     svgElement.classList.remove('active');
   }
+}
 }
