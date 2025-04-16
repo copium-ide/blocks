@@ -47,4 +47,4 @@ export function makeDraggable(svgElement) {
     svgElement.classList.remove('active');
   }
 }
-}
+
