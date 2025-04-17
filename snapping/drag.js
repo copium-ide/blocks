@@ -74,7 +74,9 @@ export function makeDraggable(svgElement) {
       // --- Crucial: Attach move and up listeners to the WINDOW ---
       // This ensures we capture events even if the cursor leaves the SVG
       window.addEventListener('mousemove', drag);
+      window.addEventListener('touchmove', drag);
       window.addEventListener('mouseup', endDrag);
+      window.addEventListener('touchend', endDrag);
        window.addEventListener('blur', endDrag); // Optional: Stop drag if window loses focus
 
       // Prevent default browser drag behavior (e.g., text selection, image ghosting)
@@ -117,7 +119,9 @@ export function makeDraggable(svgElement) {
 
     // --- Crucial: Remove listeners from the WINDOW ---
     window.removeEventListener('mousemove', drag);
+    window.removeEventListener('touchmove', drag);
     window.removeEventListener('mouseup', endDrag);
+    window.removeEventListener('touchend', endDrag);
     window.removeEventListener('blur', endDrag);
 
 
@@ -134,22 +138,9 @@ export function makeDraggable(svgElement) {
   // --- Initial Setup ---
   // Only attach mousedown to the SVG element initially
   svgElement.addEventListener('mousedown', startDrag);
+  svgElement.addEventListener('touchstart', startDrag);
 
-  // Optional: Add touch event support (basic example)
-  svgElement.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 1) {
-          // Simulate a mouse event for startDrag
-          const touch = e.touches[0];
-          const simulatedEvent = new MouseEvent('mousedown', {
-              clientX: touch.clientX,
-              clientY: touch.clientY,
-              button: 0 // Simulate left click
-          });
-          startDrag(simulatedEvent);
-          // Prevent default touch actions like scrolling
-          e.preventDefault();
-      }
-  }, { passive: false }); // passive:false needed for preventDefault
+  
 
     // You would need corresponding touchmove and touchend handlers
     // calling drag() and endDrag() similarly, attached to window/document
