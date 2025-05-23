@@ -2,84 +2,89 @@ export function makeDraggable(svgElement) {
   let isDragging = false;
   let selectedElement = null;
   let offset = { x: 0, y: 0 }; // Store offset relative to SVG coords
-  let initialTransform = null; // Store initial transform matrix components
 
-  // Helper function to get mouse coordinates in SVG space
+  // Helper function to get mouse/touch coordinates in SVG space
   function getSVGCoordinates(event) {
     const pt = svgElement.createSVGPoint();
-    pt.x = event.clientX;
-    pt.y = event.clientY;
+    // Handle touch events
+    if (event.touches && event.touches.length > 0) {
+      pt.x = event.touches[0].clientX;
+      pt.y = event.touches[0].clientY;
+    } else if (event.changedTouches && event.changedTouches.length > 0) { // For touchend
+      pt.x = event.changedTouches[0].clientX;
+      pt.y = event.changedTouches[0].clientY;
+    } else { // Mouse events
+      pt.x = event.clientX;
+      pt.y = event.clientY;
+    }
+
     // The cursor point, translated into svg coordinates
-    const svgP = pt.matrixTransform(svgElement.getScreenCTM().inverse());
+    const ctm = svgElement.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 }; // Should not happen in a normal flow
+    const svgP = pt.matrixTransform(ctm.inverse());
     return { x: svgP.x, y: svgP.y };
   }
 
-  // Helper function to get current translation from transform attribute
+  // Helper function to get current translation from CSS transform style
   function getCurrentTranslation(element) {
-     // Ensure the element has a transform list to work with
-     const transformList = element.transform.baseVal;
+    const style = window.getComputedStyle(element);
+    const matrix = style.transform || style.webkitTransform || style.mozTransform;
 
-     // Initialize transform if it doesn't exist or is empty
-     if (transformList.numberOfItems === 0) {
-         const initialTranslate = svgElement.createSVGTransform();
-         initialTranslate.setTranslate(0, 0);
-         transformList.insertItemBefore(initialTranslate, 0);
-     }
+    // No transform property defined or "none"
+    if (!matrix || matrix === 'none') {
+      return { x: 0, y: 0 };
+    }
 
-     // Consolidate transforms to get a single matrix
-     const consolidatedTransform = transformList.consolidate();
-
-     // Check if consolidation resulted in a transform
-     if (consolidatedTransform) {
-         const matrix = consolidatedTransform.matrix;
-         return { x: matrix.e, y: matrix.f };
-     } else {
-         // If no transform after consolidation (shouldn't normally happen after initialization)
-         // Fallback to ensure we have a 0,0 starting point
-         const initialTranslate = svgElement.createSVGTransform();
-         initialTranslate.setTranslate(0, 0);
-         transformList.initialize(initialTranslate); // Replace anything there with translate(0,0)
-         return { x: 0, y: 0 };
-     }
+    // Assuming matrix is in the form "matrix(a, b, c, d, e, f)"
+    // For a 2D translation, e is X and f is Y
+    const matrixValues = matrix.match(/matrix.*\((.+)\)/);
+    if (matrixValues && matrixValues[1]) {
+      const parts = matrixValues[1].split(',').map(s => parseFloat(s.trim()));
+      // For a 2D transform matrix(a, b, c, d, tx, ty)
+      // tx is at index 4, ty is at index 5
+      if (parts.length === 6) {
+        return { x: parts[4], y: parts[5] };
+      }
+    }
+    // Fallback or if transform is not a simple 2D matrix (e.g., 3D, or other functions)
+    // This basic parser won't handle complex transform strings like "translateX(10px) rotate(30deg)"
+    // getComputedStyle usually resolves this to a matrix, but good to have a fallback.
+    return { x: 0, y: 0 };
   }
 
 
   function startDrag(event) {
-    // Only react to left mouse button clicks
-    if (event.button !== 0) return;
+    // Only react to left mouse button clicks or first touch
+    if (event.type === 'mousedown' && event.button !== 0) return;
 
     const target = event.target;
-    // Find the closest path element ancestor
-    const potentialElement = target.closest('path');
+    const potentialElement = target.closest('path, rect, circle, g'); // Make it more general
 
-    if (potentialElement) {
+    if (potentialElement && svgElement.contains(potentialElement)) { // Ensure it's a child of our SVG
       selectedElement = potentialElement;
       isDragging = true;
       selectedElement.classList.add('active'); // For visual feedback
 
-      // Get mouse position in SVG coordinates
       const startPoint = getSVGCoordinates(event);
-
-      // Get the element's current translation
       const currentTranslation = getCurrentTranslation(selectedElement);
 
-      // Calculate the offset between mouse click and element's translation origin
       offset.x = startPoint.x - currentTranslation.x;
       offset.y = startPoint.y - currentTranslation.y;
 
-      // --- Crucial: Attach move and up listeners to the WINDOW ---
-      // This ensures we capture events even if the cursor leaves the SVG
+      // Attach move and up listeners to the WINDOW
       window.addEventListener('mousemove', drag);
-      window.addEventListener('touchmove', drag);
+      window.addEventListener('touchmove', drag, { passive: false }); // passive:false to allow preventDefault
       window.addEventListener('mouseup', endDrag);
       window.addEventListener('touchend', endDrag);
-       window.addEventListener('blur', endDrag); // Optional: Stop drag if window loses focus
+      window.addEventListener('blur', endDrag);
 
       // Prevent default browser drag behavior (e.g., text selection, image ghosting)
-      event.preventDefault();
+      // and for touch, prevent scrolling
+      if (event.cancelable) {
+        event.preventDefault();
+      }
 
     } else {
-      // Clicked on SVG background or a non-draggable element
       selectedElement = null;
       isDragging = false;
     }
@@ -90,67 +95,55 @@ export function makeDraggable(svgElement) {
       return;
     }
 
-    // Prevent default actions during drag (like text selection)
-    event.preventDefault();
+    // Prevent default actions during drag (like text selection or page scroll on touch)
+    if (event.cancelable) {
+        event.preventDefault();
+    }
 
-    // Get current mouse position in SVG coordinates
     const coord = getSVGCoordinates(event);
-
-    // Calculate the new translation coordinates
     const newX = coord.x - offset.x;
     const newY = coord.y - offset.y;
 
-    // Apply the new translation
-    // Note: This overwrites other transforms. If you need to preserve rotations/scales,
-    // you'd need to manipulate the transform list more carefully.
-    // For simple dragging, setTranslate is usually sufficient.
-    selectedElement.setAttribute('transform', `translate(${newX}, ${newY})`);
+    // Apply the new translation using CSS transform
+    // Using px units is good practice for CSS transforms, though browsers are often lenient for SVG.
+    selectedElement.style.transform = `translate(${newX}px, ${newY}px)`;
   }
 
   function endDrag(event) {
-     // Only react if dragging was actually active
     if (!isDragging) {
-       return;
+      return;
     }
 
-    // --- Crucial: Remove listeners from the WINDOW ---
     window.removeEventListener('mousemove', drag);
     window.removeEventListener('touchmove', drag);
     window.removeEventListener('mouseup', endDrag);
     window.removeEventListener('touchend', endDrag);
     window.removeEventListener('blur', endDrag);
 
-
     if (selectedElement) {
-       selectedElement.classList.remove('active');
+      selectedElement.classList.remove('active');
     }
 
-    // Reset state
     isDragging = false;
     selectedElement = null;
-    offset = { x: 0, y: 0 }; // Clear offset
+    offset = { x: 0, y: 0 };
   }
 
   // --- Initial Setup ---
-  // Only attach mousedown to the SVG element initially
   svgElement.addEventListener('mousedown', startDrag);
-  svgElement.addEventListener('touchstart', startDrag);
+  svgElement.addEventListener('touchstart', startDrag, { passive: false }); // passive:false to allow preventDefault in startDrag
 
-  
-
-    // You would need corresponding touchmove and touchend handlers
-    // calling drag() and endDrag() similarly, attached to window/document
-    // during the touch drag sequence. (More complex than shown here)
-
-  // Return a cleanup function if needed
+  // Return a cleanup function
   return function cleanup() {
     svgElement.removeEventListener('mousedown', startDrag);
-    // Remove any potentially lingering window listeners (though endDrag should handle this)
+    svgElement.removeEventListener('touchstart', startDrag);
+
+    // Ensure any lingering window listeners are removed (though endDrag should handle this)
     window.removeEventListener('mousemove', drag);
+    window.removeEventListener('touchmove', drag);
     window.removeEventListener('mouseup', endDrag);
+    window.removeEventListener('touchend', endDrag);
     window.removeEventListener('blur', endDrag);
-    // Remove touch listener if added
-    // svgElement.removeEventListener('touchstart', ...);
   };
 }
 
@@ -158,17 +151,22 @@ export function makeDraggable(svgElement) {
 // const mySVG = document.getElementById('my-svg-element');
 // if (mySVG) {
 //   const cleanupDraggable = makeDraggable(mySVG);
+//   // To make specific elements draggable, you might need to adjust target.closest('...')
+//   // For example, if you only want <g class="draggable"> elements to be draggable:
+//   // const potentialElement = target.closest('g.draggable');
+//
 //   // Later, if you need to disable dragging:
 //   // cleanupDraggable();
 // }
 
 // Add some basic CSS for the active state (optional)
 /*
-.active {
+svg .active {
   cursor: grabbing;
   opacity: 0.8;
+  outline: 1px dashed blue; // Example for visual feedback
 }
-path {
+svg path, svg rect, svg circle, svg g { // Apply grab cursor to potential draggable items
   cursor: grab;
 }
 */
