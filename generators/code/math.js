@@ -32,7 +32,7 @@ export function init() {
             comparator: {
                 text: "%input1 %comparator %input2",
                 generate: function(args) {
-                    return `(${args.input1}${args.comparator}${args.input2}`;
+                    return `(${args.input1}${args.comparator}${args.input2})`;
                 },
                 inputs: {
                     input1: "Number",
