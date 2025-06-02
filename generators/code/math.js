@@ -1,7 +1,7 @@
 export function init() {
     return {
         info: {
-            name: "halufun", /*required*/
+            name: "halufun",
             email: "",
             website: "https://github.com/copium-ide",
             description: "Various math utilities.",
@@ -21,9 +21,13 @@ export function init() {
     }
 }
 export function factor(args) {
-    if (args.operator != ^/) {
-        return `(
+    if (args.operator !== "^/" && args.operator !== "^") {
+        return `(${args.input1}${args.operator}${args.input2})`
     } else {
-        
+        if (args.operator == "^") {
+            return `(Math.pow(${args.input1},${args.input2}))`
+        } else {
+            return `(Math.pow(${input1}, 1/${input2}))`
+        }
     }
 }
