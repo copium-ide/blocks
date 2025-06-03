@@ -1,4 +1,4 @@
-import * as code from "./code.js";
+import * as core from "./code.js";
 
 const year = new Date().getFullYear();
 const header = `
@@ -14,12 +14,17 @@ https://copium-ide.github.io
 const Copium = {
     env: {
         version: "Copium-Lite",
-        
-    
     }
 }
 
 `;
-export function exportCode(object) {
 
+
+export function exportCode(object) {
+    const modules = core.modules.keys();
+    let code = header;
+    for (let i = 0; i < modules.length; i++) {
+        code += modules[i].init();
+        
+    }
 } 
