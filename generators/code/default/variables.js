@@ -8,7 +8,7 @@ export const main = {
         website: "https://github.com/copium-ide",
         description: "Make, get, and modify variables."
     },
-    init: function() {}, // Return code to be added at the beginning of the script.
+    init: function() {return "";}, // Return code to be added at the beginning of the script.
     
     blocks: {
         make: {
