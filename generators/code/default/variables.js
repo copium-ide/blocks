@@ -8,18 +8,13 @@ export const main = {
         website: "https://github.com/copium-ide",
         description: "Make, get, and modify variables."
     },
-    init: function() {
-        
-        return `{
-        Copium.env.vars = {};
-        const Vars = Copium.env.vars;
-        `;
-    },
+    init: function() {}, // Return code to be added at the beginning of the script.
+    
     blocks: {
         make: {
-            text: "%type variable %name = %value"
+            text: "%type variable %name = %value",
             generate: function(args) {
-                return `Vars.${args.name} = {type: ${args.type}, value: ${args.value};`
+                return `Copium.env.vars.${args.name} = {type: ${args.type}, value: ${args.value};`
             },
             inputs: {
                 type: ["String","Number","Boolean","Array","Object"],
@@ -31,7 +26,7 @@ export const main = {
         get: {
             text: "variable %name",
             generate: function(args) {
-                return `(${args.name})`;
+                return `(Copium.env.vars.${args.name})`;
             },
             inputs: {
                 name: "String"
