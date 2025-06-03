@@ -1,6 +1,7 @@
 // updateImports() is used to add to this list. It then imports said modules and creates objects for them
 const modulePaths = [
-    "./default/math.js"
+    "./default/math.js",
+    "./default/variables.js"
 ];
 const modules = {};
 
