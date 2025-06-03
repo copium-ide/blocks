@@ -1,45 +1,59 @@
-export function init() {
-    return {
-        info: {
-            name: "halufun",
-            email: "",
-            website: "https://github.com/copium-ide",
-            description: "Various math utilities.",
+export const main = {
+    info: {
+        author: "copium-ide",
+        namespace: "math",
+        name: "Math Utilities",
+        version: "1.0.0",
+        email: "",
+        website: "https://github.com/copium-ide",
+        description: "Various math utilities."
+    },
+    Drop: {
+        oplist: ["*", "+", "/", "-", "^", "^/", "%"],
+        complist: ["==", ">", "<", "<=", ">="],
+        speclist: ["log", "sin", "cos", "tan", "abs", "floor", "ceil", "round"],
+    },
+
+    blocks: {
+        operator: {
+            text: "%input1 %operator %input2",
+            generate: function(args) {
+                if (args.operator === "^") {
+                    return `Math.pow(${args.input1}, ${args.input2})`;
+                } else if (args.operator === "^/") {
+                    return `Math.pow(${args.input1}, 1 / ${args.input2})`;
+                } else {
+                    return `(${args.input1} ${args.operator} ${args.input2})`;
+                }
+            },
+            inputs: {
+                input1: "Number",
+                operator: "Drop.oplist",
+                input2: "Number"
+            }
         },
-        oplist: ["*","+","/","-","^","^/","%"],
-        complist: ["==",">","<","<=",">="],
-        speclist: ["log","-log","sin","cos","tan","cot","sec","csc","abs","floor","ceiling","round"],
-        blocks: {
-            operator: {
-                text: "%input1 %operator %input2",
-                generate: function(args) {
-                    if (args.operator !== "^/" && args.operator !== "^") {
-                        return `(${args.input1}${args.operator}${args.input2})`;
-                    } else {
-                        if (args.operator == "^") {
-                            return `(Math.pow(${args.input1},${args.input2}))`;
-                        } else {
-                            return `(Math.pow(${args.input1}, 1/${args.input2}))`;
-                        }
-                    }
-                },
-                inputs: {
-                    input1: "Number",
-                    operator: "oplist",
-                    input2: "Number"
-                }
+
+        comparator: {
+            text: "%input1 %comparator %input2",
+            generate: function(args) {
+                return `(${args.input1} ${args.comparator} ${args.input2})`;
             },
-            comparator: {
-                text: "%input1 %comparator %input2",
-                generate: function(args) {
-                    return `(${args.input1}${args.comparator}${args.input2})`;
-                },
-                inputs: {
-                    input1: "Number",
-                    comparator: "complist",
-                    input2: "Number"
-                }
+            inputs: {
+                input1: "Number",
+                comparator: "Drop.complist",
+                input2: "Number"
+            }
+        },
+
+        special: {
+            text: "%operator(%input1)",
+            generate: function(args) {
+                return `Math.${args.operator}(${args.input1})`;
             },
+            inputs: {
+                operator: "Drop.speclist",
+                input1: "Number"
+            }
         }
-    };
-}
+    }
+};
