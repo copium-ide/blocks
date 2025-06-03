@@ -8,13 +8,16 @@ export const main = {
         website: "https://github.com/copium-ide",
         description: "Make, get, and modify variables."
     },
-    init: `
+    init: function() {
+        
+        return `{
         Copium.env.vars = {};
         const Vars = Copium.env.vars;
-        `
+        `;
+    },
     blocks: {
         make: {
-            text: "%definition %type %value"
+            text: "%type variable %name = %value"
             generate: function(args) {
                 return `Vars.${args.name} = {type: ${args.type}, value: ${args.value};`
             },
@@ -26,14 +29,12 @@ export const main = {
         },
 
         get: {
-            text: "%variables",
+            text: "variable %name",
             generate: function(args) {
-                return `(${args.input1} ${args.comparator} ${args.input2})`;
+                return `(${args.name})`;
             },
             inputs: {
-                variables: /* find some way to define a type as a dynamic list. */,
-                comparator: "Drop.complist",
-                input2: "Number"
+                name: "String"
             }
         },
     }
