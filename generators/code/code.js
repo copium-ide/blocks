@@ -1,10 +1,8 @@
-let modulePaths = [
-    "./spriting.js",
-    "./math.js",
-    "./files.js",
-    "./os.js"
+// updateImports() is used to add to this list. It then imports said modules and creates objects for them
+const modulePaths = [
+    "./default/math.js"
 ];
-let modules = {};
+const modules = {};
 
 export function updateImports(path) {
     if (!modulePaths.includes(path)) {
@@ -27,4 +25,8 @@ export async function importModules() {
             console.error(`Error importing module ${modulePaths[i]}:`, error);
         }
     }
+}
+
+export function Generate(author, namespace, func, args) {
+    return modules[author][namespace].blocks[func](args);
 }
