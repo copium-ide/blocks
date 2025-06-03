@@ -3,7 +3,7 @@ const modulePaths = [
     "./default/math.js",
     "./default/variables.js"
 ];
-const modules = {};
+export const modules = {};
 
 export function updateImports(path) {
     if (!modulePaths.includes(path)) {
