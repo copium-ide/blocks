@@ -1,4 +1,4 @@
-import * as env from "./code.js";
+import * as code from "./code.js";
 
 const year = new Date().getFullYear();
 const header = `
@@ -14,35 +14,7 @@ https://copium-ide.github.io
 const Copium = {
     env: {
         version: "Copium-Lite",
-        fs: {
-            data: {},
-            path: function(path, index) {
-                const parts = path.split("/");
-                if (index >= 0 && index < parts.length) {
-                    return parts[index];
-                } else {
-                    return undefined;
-                }
-            }
-            set: function(dir, data) {
-                fs = Copium.env.fs;
-                // implement for to parse path and create dirs if they dont exist.
-            },
-            get: function(dir) {
-                if (dir.type !== "file") {
-                    throw new Error("Input is not a file");
-                } else {
-                    return dir.data;
-                }
-            },
-            del: function(dir) {
-                // set last obj in path to "{}"
-            }
-            dir: function(dir) {
-                // Returns children of a directory
-            }
-            
-        }
+        
     
     }
 }
