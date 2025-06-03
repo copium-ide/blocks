@@ -9,9 +9,9 @@ export const main = {
         description: "Various math utilities."
     },
     Drop: {
-        oplist: ["*", "+", "/", "-", "^", "^/", "%"],
-        complist: ["==", ">", "<", "<=", ">="],
-        speclist: ["log", "sin", "cos", "tan", "abs", "floor", "ceil", "round"],
+        oplist: 
+        complist: ,
+        
     },
 
     blocks: {
@@ -26,11 +26,6 @@ export const main = {
                     return `(${args.input1} ${args.operator} ${args.input2})`;
                 }
             },
-            inputs: {
-                input1: "Number",
-                operator: "Drop.oplist",
-                input2: "Number"
-            }
         },
 
         comparator: {
@@ -40,7 +35,7 @@ export const main = {
             },
             inputs: {
                 input1: "Number",
-                comparator: "Drop.complist",
+                comparator: ["==", ">", "<", "<=", ">="],
                 input2: "Number"
             }
         },
@@ -51,7 +46,7 @@ export const main = {
                 return `Math.${args.operator}(${args.input1})`;
             },
             inputs: {
-                operator: "Drop.speclist",
+                operator: ["log", "sin", "cos", "tan", "abs", "floor", "ceil", "round"],
                 input1: "Number"
             }
         }
