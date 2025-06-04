@@ -8,7 +8,7 @@ export const main = {
         website: "https://github.com/copium-ide",
         description: "Various math utilities."
     },
-    init: function() {return "";},
+    init: function() {return ``;},
 
     blocks: {
         operator: {
