@@ -22,6 +22,11 @@ export const main = {
                     return `(${args.input1} ${args.operator} ${args.input2})`;
                 }
             },
+            inputs: {
+                input1: "Number",
+                comparator: ["*","/","+","-","^","^/","%"],
+                input2: "Number"
+            }
         },
 
         comparator: {
