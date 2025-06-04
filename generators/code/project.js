@@ -14,8 +14,8 @@ export const data = {
     code: [
       {
         name: "Script1",
-        code: {
-          block1: {
+        code: [
+          {
             block: "copium-ide.vars.make",
             inputs: {
             type: {value: "String"},
@@ -23,7 +23,7 @@ export const data = {
             value: {value: " says hello"}
             }
           },
-          block2: {
+          {
             block: "copium-ide.vars.make",
             inputs: {
               type: {value: "String"},
@@ -36,7 +36,7 @@ export const data = {
               }
             }
           },
-        }
+        ]
       }, // second script here {}
     ]
   }
