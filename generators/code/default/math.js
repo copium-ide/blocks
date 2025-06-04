@@ -24,7 +24,7 @@ export const main = {
             },
             inputs: {
                 input1: "Number",
-                comparator: ["*","/","+","-","^","^/","%"],
+                operator: ["*","/","+","-","^","^/","%"],
                 input2: "Number"
             }
         },
