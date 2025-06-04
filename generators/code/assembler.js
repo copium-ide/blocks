@@ -21,7 +21,7 @@ const Copium = {
 
 
 export function exportCode(object) {
-    const modules = core.modules.keys();
+    const modules = Object.keys(core.modules);
     let code = header;
     for (let i = 0; i < modules.length; i++) {
         code += modules[i].init();
