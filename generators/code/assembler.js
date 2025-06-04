@@ -1,8 +1,11 @@
 import * as core from "./code.js";
 
 const year = new Date().getFullYear();
-const header = `
-/*
+
+
+
+export function exportCode(object) {
+    const header = `/*
 ┏┓    •       ┳┳┓┏┓
 ┃ ┏┓┏┓┓┓┏┏┳┓  ┃┃┃┣ 
 ┗┛┗┛┣┛┗┗┻┛┗┗  ┻┻┛┗┛
@@ -14,17 +17,25 @@ https://copium-ide.github.io
 const Copium = {
     env: {
         version: "Copium-Lite",
-    }
+    },
+    assets: ${core.project.assets},
 }
 
 `;
-
-
-export function exportCode(object) {
     const modules = Object.keys(core.modules);
-    let code = header;
-    for (let i = 0; i < modules.length; i++) {
-        code += modules[i].init();
-        
+    const code = Object.keys(core.project.code);
+    let script = header;
+    for (let i = 0; i < modules.length; i++) { // Gather initialization scripts from the modules.
+        script += modules[i].init();
+    }
+    for (let i = 0; i < code.length; i++) { // Parse project file and extract code.
+        script += `
+class ${code[i].name} {`; // Create class with the same name as the script.
+
+        for (let j = 0; j < code[i].code.length; j++) {
+            script += ``;
+        }
+        script += `
+}`;
     }
 } 
