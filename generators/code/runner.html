@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copium IDE - Web Runner</title>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --text-color: #d4d4d4;
+            --primary-color: #007acc;
+            --border-color: #3e3e3e;
+            --input-bg: #2a2a2a;
+            --pre-bg: #1a1a1a;
+            --error-color: #f44747;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 2em;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5em;
+        }
+        h1, h2 {
+            margin: 0;
+            color: var(--primary-color);
+            font-weight: 300;
+        }
+        main {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2em;
+            height: 75vh;
+        }
+        .panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1em;
+        }
+        textarea, pre {
+            flex-grow: 1;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 1em;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 14px;
+            color: var(--text-color);
+            resize: none;
+        }
+        pre {
+            background-color: var(--pre-bg);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-y: auto;
+        }
+        .input-methods {
+            display: flex;
+            gap: 1em;
+            align-items: center;
+        }
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.8em 1.5em;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #005a9e;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .file-label {
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            padding: 0.7em 1.2em;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .file-label:hover {
+            background-color: var(--border-color);
+        }
+        #status {
+            color: var(--error-color);
+            font-weight: bold;
+            min-height: 1.2em;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Copium IDE Web Runner</h1>
+    
+    <main>
+        <div class="panel">
+            <h2>Project JSON Input</h2>
+            <div class="input-methods">
+                <button id="generate-btn">► Generate Code</button>
+                <input type="file" id="file-input" accept=".json, .js">
+                <label for="file-input" class="file-label">Upload Project File</label>
+                <!-- URL input can be added here if needed -->
+            </div>
+            <textarea id="project-json-input" spellcheck="false" placeholder="Paste your project JSON here..."></textarea>
+        </div>
+
+        <div class="panel">
+            <h2>Generated Output</h2>
+            <div id="status"></div>
+            <pre><code id="output-code">Click "Generate Code" to see the result.</code></pre>
+        </div>
+    </main>
+
+    <script type="module">
+        // Import the necessary modules from your local files
+        import * as core from './code.js';
+        import * as assembler from './assembler.js';
+
+        // --- DOM Elements ---
+        const generateBtn = document.getElementById('generate-btn');
+        const fileInput = document.getElementById('file-input');
+        const projectJsonInput = document.getElementById('project-json-input');
+        const outputCode = document.getElementById('output-code');
+        const statusEl = document.getElementById('status');
+        
+        // --- Example Project Data ---
+        const exampleProject = {
+          "meta": {
+            "copium": "Copium-Lite",
+            "author": "copium-ide",
+            "name": "Web Test Project",
+            "namespace": "testproj"
+          },
+          "modules": [
+            "./default/variables.js"
+          ],
+          "project": {
+            "assets": { "sound": "meow.mp3" },
+            "code": [
+              {
+                "name": "MainScript",
+                "code": [
+                  {
+                    "block": "copium-ide.vars.make",
+                    "inputs": {
+                      "type": { "value": "String" },
+                      "name": { "value": "message" },
+                      "value": { "value": "Hello from the web runner!" }
+                    }
+                  },
+                  {
+                    "block": "copium-ide.vars.make",
+                    "inputs": {
+                      "type": { "value": "String" },
+                      "name": { "value": "nestedMessage" },
+                      "value": {
+                        "block": "copium-ide.vars.get",
+                        "inputs": {
+                          "name": { "value": "message" }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        };
+        // Pre-fill the textarea with the example
+        projectJsonInput.value = JSON.stringify(exampleProject, null, 2);
+
+
+        // --- Event Listeners ---
+        generateBtn.addEventListener('click', handleGeneration);
+        
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                projectJsonInput.value = e.target.result;
+                statusEl.textContent = `Loaded ${file.name}. Click "Generate Code".`;
+            };
+            reader.onerror = () => {
+                statusEl.textContent = `Error reading file: ${reader.error}`;
+            }
+            reader.readAsText(file);
+        });
+
+
+        /**
+         * Main function to drive the code generation process.
+         */
+        async function handleGeneration() {
+            statusEl.textContent = '';
+            outputCode.textContent = 'Generating...';
+
+            try {
+                // 1. Get and parse the project JSON from the textarea
+                const projectDataString = projectJsonInput.value;
+                if (!projectDataString.trim()) {
+                    throw new Error("Project JSON input is empty.");
+                }
+                const projectData = JSON.parse(projectDataString);
+
+                // 2. Load the project data into the core system
+                // This simulates what `importProject` would do, but with data we already have.
+                core.project.project = projectData.project;
+                core.project.meta = projectData.meta;
+                core.project.modules = projectData.modules;
+                
+                // 3. Dynamically import the modules listed in the project
+                core.modulePaths.length = 0; // Clear previous paths
+                for (const path of projectData.modules) {
+                    core.updateImports(path);
+                }
+                await core.importModules();
+
+                // 4. Run the assembler to generate the final code
+                const finalCode = assembler.exportCode();
+                
+                // 5. Display the result
+                outputCode.textContent = finalCode;
+
+            } catch (error) {
+                console.error("Generation failed:", error);
+                statusEl.textContent = `Error: ${error.message}`;
+                outputCode.textContent = `An error occurred. Check the browser console (F12) for details.`;
+            }
+        }
+    </script>
+</body>
+</html>
