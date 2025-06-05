@@ -1,11 +1,8 @@
 import * as core from "./code.js";
 
-const year = new Date().getFullYear();
-
-
-
-export function exportCode(object) {
-    const header = `/*
+export function exportCode() {
+    const year = new Date().getFullYear();
+    let script = `/*
 ┏┓    •       ┳┳┓┏┓
 ┃ ┏┓┏┓┓┓┏┏┳┓  ┃┃┃┣ 
 ┗┛┗┛┣┛┗┗┻┛┗┗  ┻┻┛┗┛
@@ -18,24 +15,76 @@ const Copium = {
     env: {
         version: "Copium-Lite",
     },
-    assets: ${core.project.assets},
-}
-
+    assets: ${JSON.stringify(core.project.project.assets || {}, null, 2)},
+};
 `;
-    const modules = Object.keys(core.modules);
-    const code = Object.keys(core.project.code);
-    let script = header;
-    for (let i = 0; i < modules.length; i++) { // Gather initialization scripts from the modules.
-        script += modules[i].init();
-    }
-    for (let i = 0; i < code.length; i++) { // Parse project file and extract code.
-        script += `
-class ${code[i].name} {`; // Create class with the same name as the script.
 
-        for (let j = 0; j < code[i].code.length; j++) {
-            script += ``;
+    for (const author in core.modules) {
+        for (const namespace in core.modules[author]) {
+            const module = core.modules[author][namespace];
+            if (typeof module.init === 'function') {
+                script += module.init();
+            }
+        }
+    }
+    script += "\n";
+
+    const generateCodeFromBlock = (blockData) => {
+        if (blockData.hasOwnProperty('value')) {
+            return JSON.stringify(blockData.value);
+        }
+
+        if (blockData.hasOwnProperty('block')) {
+            const [author, namespace, func] = blockData.block.split('.');
+            const blockDefinition = core.modules[author]?.[namespace]?.blocks?.[func];
+            if (!blockDefinition) {
+                return `/* ERROR: Block '${blockData.block}' not found. */`;
+            }
+
+            const args = {};
+            for (const inputName in blockData.inputs) {
+                args[inputName] = generateCodeFromBlock(blockData.inputs[inputName]);
+            }
+            return blockDefinition.generate(args);
+        }
+        return '/* Invalid block data */';
+    };
+
+    const projectScripts = core.project.project.code;
+    for (let i = 0; i < projectScripts.length; i++) {
+        const currentScript = projectScripts[i];
+        script += `
+class ${currentScript.name} {
+    run() {`;
+
+        for (let j = 0; j < currentScript.code.length; j++) {
+            const block = currentScript.code[j];
+            script += `
+        ${generateCodeFromBlock(block)};`;
         }
         script += `
+    }
 }`;
     }
-} 
+
+    if (projectScripts.length > 0) {
+        script += `
+
+function main() {`;
+        for (const currentScript of projectScripts) {
+            script += `
+    try {
+        const instance = new ${currentScript.name}();
+        instance.run();
+    } catch (e) {
+        console.error("Error in script '${currentScript.name}':", e);
+    }`;
+        }
+        script += `
+}
+main();
+`;
+    }
+
+    return script;
+}
