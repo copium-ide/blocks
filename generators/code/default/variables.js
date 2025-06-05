@@ -10,14 +10,14 @@ export const main = {
     },
     init: function() {
         return `
-Copium.env.vars = {};`.;
-    }, // Return code to be added at the beginning of the script.
+Copium.env.vars = {};`;
+    },
     
     blocks: {
         make: {
             text: "%type variable %name = %value",
             generate: function(args) {
-                return `Copium.env.vars.${args.name} = {type: ${args.type}, value: ${args.value};`
+                return `Copium.env.vars.${args.name} = {type: ${args.type}, value: ${args.value}};`
             },
             inputs: {
                 type: ["String","Number","Boolean","Array","Object"],
