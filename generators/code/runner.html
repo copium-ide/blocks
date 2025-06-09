@@ -49,8 +49,12 @@
             cursor: pointer;
             transition: background-color 0.2s;
         }
-        #assembleBtn:hover {
+        #assembleBtn:hover:not(:disabled) {
             background-color: #0056b3;
+        }
+        #assembleBtn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
         }
         pre {
             background-color: #e9ecef;
@@ -61,10 +65,10 @@
             font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
         }
         .note {
-            background-color: #fff3cd;
-            border-left: 4px solid #ffeeba;
+            background-color: #e7f3ff;
+            border-left: 4px solid #007bff;
             padding: 1em;
-            margin: 1em 0;
+            margin: 1.5em 0;
             border-radius: 4px;
         }
         #logs {
@@ -78,16 +82,11 @@
 <body>
     <div class="container">
         <h1>Copium IDE Project Runner</h1>
-        <p>This page uses the logic from <code>code.js</code> and <code>assembler.js</code> to run your project.</p>
+        <p>This page uses your <code>code.js</code> and <code>assembler.js</code> files as ES modules to assemble a project from a URL.</p>
 
         <div class="note">
-            <strong>Instructions:</strong>
-            <ol>
-                <li>Host your <code>project.js</code> and its required modules (e.g., <code>variables.js</code>) on a service with CORS enabled, like a GitHub Gist.</li>
-                <li>Make sure the <code>modules</code> array in your <code>project.js</code> uses the full, raw URL of the module files.</li>
-                <li>Paste the raw URL for your <code>project.js</code> below and click "Assemble".</li>
-            </ol>
-            <strong>Example Project URL:</strong> <code>https://gist.githubusercontent.com/ybot1122/8e31a28a383d47f15433a005eb393437/raw/project.js</code>
+            <strong>Example Project URL:</strong> You can use this pre-made Gist to test the functionality. <br>
+            <code>https://gist.githubusercontent.com/ybot1122/8e31a28a383d47f15433a005eb393437/raw/project.js</code>
         </div>
 
         <div class="input-group">
@@ -103,9 +102,10 @@
     </div>
 
     <script type="module">
-        // Import the core logic and assembler from their respective files.
+        // Import your logic files using the specified namespace import syntax.
+        // These files must be in the same directory as this HTML file.
         import * as core from './code.js';
-        import { exportCode } from './assembler.js';
+        import * as assembler from './assembler.js';
 
         // --- DOM Elements ---
         const projectUrlInput = document.getElementById('projectUrl');
@@ -136,43 +136,49 @@
                 return;
             }
 
-            // Reset UI
+            // Reset UI for a new run
             outputEl.textContent = 'Assembling...';
             clearLogs();
             assembleBtn.disabled = true;
 
             try {
-                // 1. Import project data. This function is in code.js
-                // Note: The importProject in your code.js has some issues (e.g., await outside async).
-                // We'll call a corrected version of the flow here.
+                // The `importProject` function in your `code.js` has a flawed execution flow.
+                // Instead of calling it, we will perform the correct sequence of operations here,
+                // using the exported functions and state objects from `core`.
+
+                // 1. Fetch the project module from the provided URL.
                 log(`Importing project from: ${url}`);
                 const projModule = await import(url);
                 if (!projModule.data || !projModule.data.project) {
-                    throw new Error("Project file is invalid or must have a named export 'data'.");
+                    throw new Error("Project file is invalid. It must be an ES module with a named export 'data' containing a 'project' object.");
                 }
-                core.project.project = projModule.data.project;
-                log("Project data loaded successfully.");
                 
-                // 2. Find and prepare module imports
-                core.modulePaths.length = 0; // Clear existing paths
+                // 2. Populate the shared state in `code.js`.
+                // We assign to a property of the exported `project` object, we don't reassign the object itself.
+                core.project.project = projModule.data.project;
+                log("Project data loaded successfully into shared state.");
+                
+                // 3. Collect all module dependencies from the project data.
+                core.modulePaths.length = 0; // Clear any previous paths
                 const projectModules = core.project.project.modules || [];
                 for (const modulePath of projectModules) {
-                    core.updateImports(modulePath);
+                    core.updateImports(modulePath); // This function is from your `code.js`
                 }
 
-                // 3. Import the modules listed in the project file. This function is in code.js
-                await core.importModules();
+                // 4. Import all collected modules.
+                await core.importModules(); // This function is from your `code.js`
                 
-                // 4. Generate the final code. This function is in assembler.js
-                const finalCode = exportCode();
+                // 5. Generate the final code using the assembler.
+                // We call the function from the imported `assembler` namespace.
+                const finalCode = assembler.exportCode();
                 
-                // 5. Display the result.
+                // 6. Display the result.
                 outputEl.textContent = finalCode;
 
             } catch (e) {
                 outputEl.textContent = 'An error occurred during assembly. See logs for details.';
                 error(`Assembly process failed: ${e.message}`);
-                console.error(e);
+                console.error(e); // Also log the full error object for more details.
             } finally {
                 assembleBtn.disabled = false;
             }
