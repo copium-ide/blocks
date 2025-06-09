@@ -3,240 +3,182 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Copium IDE - Web Runner</title>
+    <title>Copium IDE Project Runner</title>
     <style>
-        :root {
-            --bg-color: #1e1e1e;
-            --text-color: #d4d4d4;
-            --primary-color: #007acc;
-            --border-color: #3e3e3e;
-            --input-bg: #2a2a2a;
-            --pre-bg: #1a1a1a;
-            --error-color: #f44747;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        }
         body {
-            background-color: var(--bg-color);
-            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            background-color: #f8f9fa;
+            color: #212529;
             margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
             padding: 2em;
-            display: flex;
-            flex-direction: column;
-            gap: 1.5em;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
         h1, h2 {
-            margin: 0;
-            color: var(--primary-color);
-            font-weight: 300;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 0.5em;
+            margin-top: 1.5em;
+            color: #343a40;
         }
-        main {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2em;
-            height: 75vh;
-        }
-        .panel {
+        .input-group {
             display: flex;
-            flex-direction: column;
-            gap: 1em;
+            gap: 10px;
+            margin-bottom: 1em;
         }
-        textarea, pre {
+        #projectUrl {
             flex-grow: 1;
-            background-color: var(--input-bg);
-            border: 1px solid var(--border-color);
+            padding: 10px;
+            border: 1px solid #ced4da;
             border-radius: 4px;
-            padding: 1em;
-            font-family: "Courier New", Courier, monospace;
-            font-size: 14px;
-            color: var(--text-color);
-            resize: none;
+            font-size: 1rem;
         }
-        pre {
-            background-color: var(--pre-bg);
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            overflow-y: auto;
-        }
-        .input-methods {
-            display: flex;
-            gap: 1em;
-            align-items: center;
-        }
-        button {
-            background-color: var(--primary-color);
-            color: white;
+        #assembleBtn {
+            padding: 10px 20px;
             border: none;
-            padding: 0.8em 1.5em;
+            background-color: #007bff;
+            color: white;
             border-radius: 4px;
+            font-size: 1rem;
             cursor: pointer;
-            font-size: 16px;
             transition: background-color 0.2s;
         }
-        button:hover {
-            background-color: #005a9e;
+        #assembleBtn:hover {
+            background-color: #0056b3;
         }
-        input[type="file"] {
-            display: none;
-        }
-        .file-label {
-            background-color: var(--input-bg);
-            border: 1px solid var(--border-color);
-            padding: 0.7em 1.2em;
+        pre {
+            background-color: #e9ecef;
+            padding: 1em;
             border-radius: 4px;
-            cursor: pointer;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
         }
-        .file-label:hover {
-            background-color: var(--border-color);
+        .note {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffeeba;
+            padding: 1em;
+            margin: 1em 0;
+            border-radius: 4px;
         }
-        #status {
-            color: var(--error-color);
-            font-weight: bold;
-            min-height: 1.2em;
+        #logs {
+            font-size: 0.85em;
+            color: #495057;
+            max-height: 200px;
+            overflow-y: auto;
         }
     </style>
 </head>
 <body>
+    <div class="container">
+        <h1>Copium IDE Project Runner</h1>
+        <p>This page uses the logic from <code>code.js</code> and <code>assembler.js</code> to run your project.</p>
 
-    <h1>Copium IDE Web Runner</h1>
-    
-    <main>
-        <div class="panel">
-            <h2>Project JSON Input</h2>
-            <div class="input-methods">
-                <button id="generate-btn">► Generate Code</button>
-                <input type="file" id="file-input" accept=".json, .js">
-                <label for="file-input" class="file-label">Upload Project File</label>
-                <!-- URL input can be added here if needed -->
-            </div>
-            <textarea id="project-json-input" spellcheck="false" placeholder="Paste your project JSON here..."></textarea>
+        <div class="note">
+            <strong>Instructions:</strong>
+            <ol>
+                <li>Host your <code>project.js</code> and its required modules (e.g., <code>variables.js</code>) on a service with CORS enabled, like a GitHub Gist.</li>
+                <li>Make sure the <code>modules</code> array in your <code>project.js</code> uses the full, raw URL of the module files.</li>
+                <li>Paste the raw URL for your <code>project.js</code> below and click "Assemble".</li>
+            </ol>
+            <strong>Example Project URL:</strong> <code>https://gist.githubusercontent.com/ybot1122/8e31a28a383d47f15433a005eb393437/raw/project.js</code>
         </div>
 
-        <div class="panel">
-            <h2>Generated Output</h2>
-            <div id="status"></div>
-            <pre><code id="output-code">Click "Generate Code" to see the result.</code></pre>
+        <div class="input-group">
+            <input type="url" id="projectUrl" placeholder="Enter raw project.js URL..." value="https://gist.githubusercontent.com/ybot1122/8e31a28a383d47f15433a005eb393437/raw/project.js">
+            <button id="assembleBtn">Assemble Project</button>
         </div>
-    </main>
+
+        <h2>Generated Code</h2>
+        <pre><code id="output">Click "Assemble Project" to generate code.</code></pre>
+        
+        <h2>Logs</h2>
+        <pre id="logs"></pre>
+    </div>
 
     <script type="module">
-        // Import the necessary modules from your local files
+        // Import the core logic and assembler from their respective files.
         import * as core from './code.js';
-        import * as assembler from './assembler.js';
+        import { exportCode } from './assembler.js';
 
         // --- DOM Elements ---
-        const generateBtn = document.getElementById('generate-btn');
-        const fileInput = document.getElementById('file-input');
-        const projectJsonInput = document.getElementById('project-json-input');
-        const outputCode = document.getElementById('output-code');
-        const statusEl = document.getElementById('status');
+        const projectUrlInput = document.getElementById('projectUrl');
+        const assembleBtn = document.getElementById('assembleBtn');
+        const outputEl = document.getElementById('output');
+        const logsEl = document.getElementById('logs');
+
+        // --- Logging Helpers ---
+        function log(message) {
+            console.log(message);
+            logsEl.textContent += `[LOG] ${message}\n`;
+            logsEl.scrollTop = logsEl.scrollHeight;
+        }
+        function error(message) {
+            console.error(message);
+            logsEl.textContent += `[ERROR] ${message}\n`;
+            logsEl.scrollTop = logsEl.scrollHeight;
+        }
+        function clearLogs() {
+            logsEl.textContent = '';
+        }
         
-        // --- Example Project Data ---
-        const exampleProject = {
-          "meta": {
-            "copium": "Copium-Lite",
-            "author": "copium-ide",
-            "name": "Web Test Project",
-            "namespace": "testproj"
-          },
-          "modules": [
-            "./default/variables.js"
-          ],
-          "project": {
-            "assets": { "sound": "meow.mp3" },
-            "code": [
-              {
-                "name": "MainScript",
-                "code": [
-                  {
-                    "block": "copium-ide.vars.make",
-                    "inputs": {
-                      "type": { "value": "String" },
-                      "name": { "value": "message" },
-                      "value": { "value": "Hello from the web runner!" }
-                    }
-                  },
-                  {
-                    "block": "copium-ide.vars.make",
-                    "inputs": {
-                      "type": { "value": "String" },
-                      "name": { "value": "nestedMessage" },
-                      "value": {
-                        "block": "copium-ide.vars.get",
-                        "inputs": {
-                          "name": { "value": "message" }
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        };
-        // Pre-fill the textarea with the example
-        projectJsonInput.value = JSON.stringify(exampleProject, null, 2);
-
-
-        // --- Event Listeners ---
-        generateBtn.addEventListener('click', handleGeneration);
-        
-        fileInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                projectJsonInput.value = e.target.result;
-                statusEl.textContent = `Loaded ${file.name}. Click "Generate Code".`;
-            };
-            reader.onerror = () => {
-                statusEl.textContent = `Error reading file: ${reader.error}`;
+        // --- Main Application Logic ---
+        async function handleAssembly() {
+            const url = projectUrlInput.value.trim();
+            if (!url) {
+                alert("Please enter a project URL.");
+                return;
             }
-            reader.readAsText(file);
-        });
 
-
-        /**
-         * Main function to drive the code generation process.
-         */
-        async function handleGeneration() {
-            statusEl.textContent = '';
-            outputCode.textContent = 'Generating...';
+            // Reset UI
+            outputEl.textContent = 'Assembling...';
+            clearLogs();
+            assembleBtn.disabled = true;
 
             try {
-                // 1. Get and parse the project JSON from the textarea
-                const projectDataString = projectJsonInput.value;
-                if (!projectDataString.trim()) {
-                    throw new Error("Project JSON input is empty.");
+                // 1. Import project data. This function is in code.js
+                // Note: The importProject in your code.js has some issues (e.g., await outside async).
+                // We'll call a corrected version of the flow here.
+                log(`Importing project from: ${url}`);
+                const projModule = await import(url);
+                if (!projModule.data || !projModule.data.project) {
+                    throw new Error("Project file is invalid or must have a named export 'data'.");
                 }
-                const projectData = JSON.parse(projectDataString);
-
-                // 2. Load the project data into the core system
-                // This simulates what `importProject` would do, but with data we already have.
-                core.project.project = projectData.project;
-                core.project.meta = projectData.meta;
-                core.project.modules = projectData.modules;
+                core.project.project = projModule.data.project;
+                log("Project data loaded successfully.");
                 
-                // 3. Dynamically import the modules listed in the project
-                core.modulePaths.length = 0; // Clear previous paths
-                for (const path of projectData.modules) {
-                    core.updateImports(path);
+                // 2. Find and prepare module imports
+                core.modulePaths.length = 0; // Clear existing paths
+                const projectModules = core.project.project.modules || [];
+                for (const modulePath of projectModules) {
+                    core.updateImports(modulePath);
                 }
+
+                // 3. Import the modules listed in the project file. This function is in code.js
                 await core.importModules();
-
-                // 4. Run the assembler to generate the final code
-                const finalCode = assembler.exportCode();
                 
-                // 5. Display the result
-                outputCode.textContent = finalCode;
+                // 4. Generate the final code. This function is in assembler.js
+                const finalCode = exportCode();
+                
+                // 5. Display the result.
+                outputEl.textContent = finalCode;
 
-            } catch (error) {
-                console.error("Generation failed:", error);
-                statusEl.textContent = `Error: ${error.message}`;
-                outputCode.textContent = `An error occurred. Check the browser console (F12) for details.`;
+            } catch (e) {
+                outputEl.textContent = 'An error occurred during assembly. See logs for details.';
+                error(`Assembly process failed: ${e.message}`);
+                console.error(e);
+            } finally {
+                assembleBtn.disabled = false;
             }
         }
+        
+        assembleBtn.addEventListener('click', handleAssembly);
     </script>
-    <script src="https://copium-ide.github.io/blocks/eruda.js"></script>
 </body>
 </html>
