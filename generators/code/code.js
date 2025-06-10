@@ -11,7 +11,7 @@ export async function importProject(path) {
         updateImports(project.modules[i]);
         importModules();
     }
-
+}
 export function updateImports(path) {
     if (!modulePaths.includes(path)) {
         modulePaths.push(path);
