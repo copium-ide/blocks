@@ -7,7 +7,7 @@ export const data = {
   },
   modules: [
     "./default/math.js",
-    "./default/variables.js"
+    "https://cdn.jsdelivr.net/gh/copium-ide/blocks/generators/code/default/variables.js"
   ],
   project: {
     assets: {},
