@@ -34,7 +34,7 @@ export async function processProject(url, exportCodeFunction) {
     for (const modulePath of projectModules) {
         updateImports(modulePath);
     }
-
+    console.log("Found project modules to load:", projectModules);
     // 5. Import all collected modules at once.
     await importModules();
 
