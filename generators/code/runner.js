@@ -1,5 +1,6 @@
+// runner.js
+
 // Import your logic files using the specified namespace import syntax.
-// These files must be in the same directory as this HTML file.
 import * as core from './code.js';
 import * as assembler from './assembler.js';
 
@@ -28,11 +29,21 @@ function clearLogs() {
 
 // --- Main Application Logic ---
 async function handleAssembly() {
-    const url = projectUrlInput.value.trim();
+    // Note: You must convert raw GitHub URLs to a CDN URL like jsDelivr
+    // Example: https://raw.githubusercontent.com/... -> https://cdn.jsdelivr.net/gh/...
+    let url = projectUrlInput.value.trim();
     if (!url) {
         alert("Please enter a project URL.");
         return;
     }
+
+    // Automatically convert raw GitHub URLs
+    if (url.startsWith('https://raw.githubusercontent.com/')) {
+        const newUrl = 'https://cdn.jsdelivr.net/gh/' + url.substring('https://raw.githubusercontent.com/'.length).replace('/main/', '@main/');
+        log(`Converting GitHub URL to jsDelivr: ${newUrl}`);
+        url = newUrl;
+    }
+
 
     // Reset UI for a new run
     outputEl.textContent = 'Assembling...';
@@ -40,38 +51,15 @@ async function handleAssembly() {
     assembleBtn.disabled = true;
 
     try {
-        // The `importProject` function in your `code.js` has a flawed execution flow.
-        // Instead of calling it, we will perform the correct sequence of operations here,
-        // using the exported functions and state objects from `core`.
+        log(`Starting assembly for project: ${url}`);
+        
+        // Delegate all the complex logic to the processProject function in code.js.
+        // We pass the assembler's export function as a callback.
+        const finalCode = await core.processProject(url, assembler.exportCode);
 
-        // 1. Fetch the project module from the provided URL.
-        log(`Importing project from: ${url}`);
-        const projModule = await import(url);
-        if (!projModule.data || !projModule.data.project) {
-            throw new Error("Project file is invalid. It must be an ES module with a named export 'data' containing a 'project' object.");
-        }
-
-        // 2. Populate the shared state in `code.js`.
-        // We assign to a property of the exported `project` object, we don't reassign the object itself.
-        core.project.project = projModule.data.project;
-        log("Project data loaded successfully into shared state.");
-
-        // 3. Collect all module dependencies from the project data.
-        core.modulePaths.length = 0; // Clear any previous paths
-        const projectModules = core.project.project.modules || [];
-        for (const modulePath of projectModules) {
-            core.updateImports(modulePath); // This function is from your `code.js`
-        }
-
-        // 4. Import all collected modules.
-        await core.importModules(); // This function is from your `code.js`
-
-        // 5. Generate the final code using the assembler.
-        // We call the function from the imported `assembler` namespace.
-        const finalCode = assembler.exportCode();
-
-        // 6. Display the result.
+        // Display the result.
         outputEl.textContent = finalCode;
+        log("Assembly completed successfully.");
 
     } catch (e) {
         outputEl.textContent = 'An error occurred during assembly. See logs for details.';
