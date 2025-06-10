@@ -3,8 +3,8 @@ export const modulePaths = [];
 export const modules = {};
 export const project = {};
 
-export function importProject(path) {
-    const proj = await import(path);
+export async function importProject(path) {
+    const proj = import(path);
     project = proj.data;
     modulePaths = [];
     for (let i = 0; i < project.modules.length; i++) {
@@ -21,7 +21,7 @@ export function updateImports(path) {
 export async function importModules() {
     for (let i = 0; i < modulePaths.length; i++) {
         try {
-            const mod = await import(modulePaths[i]);
+            const mod = import(modulePaths[i]);
             const author = mod.main.info.author;
             const namespace = mod.main.info.namespace;
             if (!modules.hasOwnProperty(author)) {
