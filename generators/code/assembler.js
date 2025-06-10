@@ -3,7 +3,7 @@ import * as core from "./code.js";
 export function exportCode() {
     const year = new Date().getFullYear();
     let script = `/*
-┏┓    •     ┳┳┓┏┓
+┏┓    •       ┳┳┓┏┓
 ┃ ┏┓┏┓┓┓┏┏┳┓  ┃┃┃┣ 
 ┗┛┗┛┣┛┗┗┻┛┗┗  ┻┻┛┗┛
     ┛              
