@@ -9,6 +9,21 @@ const projectUrlInput = document.getElementById('projectUrl');
 const assembleBtn = document.getElementById('assembleBtn');
 const outputEl = document.getElementById('output');
 const logsEl = document.getElementById('logs');
+const debugButton = document.getElementById('debug-modules-button');
+
+// 2. Add a click event listener
+debugButton.addEventListener('click', () => {
+    console.log("--- Debugging 'modules' State ---");
+
+    // 3. Log the current content of the imported 'modules' object
+    // The browser console will provide an interactive, expandable view.
+    console.log(core.modules); 
+    
+    // For a more detailed, non-collapsible view in some consoles:
+    // console.dir(modules, { depth: null });
+
+    console.log("---------------------------------");
+});
 
 // --- Logging Helpers ---
 function log(message) {
