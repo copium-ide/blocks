@@ -1,7 +1,7 @@
 // runner.js
 
 // Import your logic files using the specified namespace import syntax.
-import * as core from './code.js';
+import * as core from './core.js';
 import * as assembler from './assembler.js';
 
 // --- DOM Elements ---
