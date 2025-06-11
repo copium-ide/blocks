@@ -67,7 +67,7 @@ async function handleAssembly() {
 
     try {
         log(`Starting assembly for project: ${url}`);
-        core.processProject();
+        await core.processProject();
         const finalCode = await assembler.exportCode();
 
         // Display the result.
