@@ -69,31 +69,41 @@ function updateImports(path) {
  * Imports all modules listed in the modulePaths array and populates the `modules` object.
  */
 async function importModules() {
-    // Using Promise.all to fetch modules in parallel for better performance.
-    const importPromises = modulePaths.map(async (path) => {
-        try {
-            const mod = await import(path);
-            const { author, namespace } = mod.main.info;
+    const importPromises = modulePaths.map(path => import(path));
 
-            if (!author || !namespace) {
-                console.warn(`Module at ${path} is missing author or namespace in its info.`);
-                return; // Skip this module
-            }
+    // Use Promise.allSettled to wait for all imports to finish, regardless of success or failure.
+    const results = await Promise.allSettled(importPromises);
 
-            // Create author namespace if it doesn't exist
-            if (!modules.hasOwnProperty(author)) {
-                modules[author] = {};
+    results.forEach((result, index) => {
+        const path = modulePaths[index]; // Get the original path for error logging
+
+        // Check if the promise was fulfilled (successful)
+        if (result.status === 'fulfilled') {
+            const mod = result.value;
+            // Add defensive checks for the module's structure
+            if (mod && mod.main && mod.main.info) {
+                const { author, namespace } = mod.main.info;
+
+                if (!author || !namespace) {
+                    console.warn(`Module at ${path} is missing author or namespace in its info.`);
+                    return; // Skip this module
+                }
+
+                // Create author namespace if it doesn't exist
+                if (!modules.hasOwnProperty(author)) {
+                    modules[author] = {};
+                }
+                modules[author][namespace] = mod.main;
+            } else {
+                 console.warn(`Module at ${path} has an invalid structure and will be skipped.`);
             }
-            modules[author][namespace] = mod.main;
-        } catch (error) {
-            // Throw a more specific error to be caught by the top-level handler
-            throw new Error(`Failed to import or process module at ${path}: ${error.message}`);
+        } 
+        // The promise was rejected (failed)
+        else {
+            console.error(`Failed to import module at ${path}: ${result.reason}`);
         }
     });
-
-    await Promise.all(importPromises);
 }
-
 /**
  * A utility function to retrieve a specific block function from a loaded module.
  * @param {string} author
