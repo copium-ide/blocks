@@ -2,7 +2,7 @@
 export const modulePaths = [];
 export const modules = {};
 export const project = {};
-export async function processProject(url, exportCodeFunction) {
+export async function processProject(url) {
     clearState();
 
     const projModule = await import(url);
@@ -20,9 +20,6 @@ export async function processProject(url, exportCodeFunction) {
     console.log("Found project modules to load:", projectModules);
     // 5. Import all collected modules at once.
     await importModules();
-
-    // 6. Generate the final code using the provided assembler function and return it.
-    return exportCodeFunction();
 }
 
 /**
