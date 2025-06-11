@@ -44,9 +44,19 @@ export const data = {
               input: {
                 block: "copium-ide.math.operator",
                 inputs: {
-                  input1: {value: "Bingus"},
+                  input1: {
+                    block: "copium-ide.vars.get",
+                    inputs: {
+                      name: {value: "Bingus"}
+                    }
+                  },
                   operator: {"+"},
-                  input2: {value: "Bingus"}
+                  input2: {
+                    block: "copium-ide.vars.get",
+                    inputs: {
+                      name: {value: "Boingus"}
+                    }
+                  },
                 }
               }
             }
