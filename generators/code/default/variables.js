@@ -17,7 +17,7 @@ Copium.env.vars = {};`;
         make: {
             text: "%type variable %name = %value",
             generate: function(args) {
-                return `Copium.env.vars.${args.name} = {type: ${args.type}, value: ${args.value}};`
+                return `Copium.env.vars[${args.name}] = {type: ${args.type}, value: ${args.value}}`
             },
             inputs: {
                 type: ["String","Number","Boolean","Array","Object"],
@@ -29,7 +29,7 @@ Copium.env.vars = {};`;
         get: {
             text: "variable %name",
             generate: function(args) {
-                return `(Copium.env.vars.${args.name}.value)`;
+                return `(Copium.env.vars[${args.name}].value)`;
             },
             inputs: {
                 name: "String"
