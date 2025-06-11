@@ -1,4 +1,4 @@
-import * as core from "./code.js";
+import * as core from "./core.js";
 
 export function exportCode() {
     const year = new Date().getFullYear();
