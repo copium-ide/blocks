@@ -10,7 +10,7 @@ export async function processProject(url, exportCodeFunction) {
         throw new Error("Project file is invalid. It must be an ES module with a named export 'data' containing a 'project' object.");
     }
 
-    project.project = projModule.data.project;
+    project = projModule.data;
 
     // 4. Collect all module dependencies from the project data.
     const projectModules = project.modules || [];
