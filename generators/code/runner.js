@@ -54,7 +54,7 @@ async function handleAssembly() {
 
     // Automatically convert raw GitHub URLs
     if (url.startsWith('https://raw.githubusercontent.com/')) {
-        const newUrl = 'https://cdn.jsdelivr.net/gh/' + url.substring('https://raw.githubusercontent.com/'.length).replace('/main/', '@main/');
+        const newUrl = 'https://cdn.jsdelivr.net/gh/' + url.substring('https://raw.githubusercontent.com/'.length).replace('/main/', '@latest/');
         log(`Converting GitHub URL to jsDelivr: ${newUrl}`);
         url = newUrl;
     }
