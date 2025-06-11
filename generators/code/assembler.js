@@ -50,7 +50,7 @@ const Copium = {
         return '/* Invalid block data */';
     };
 
-    const projectScripts = core.project.project.code;
+    const projectScripts = core.project;
     console.log(projectScripts);
     for (let i = 0; i < projectScripts.length; i++) {
         const currentScript = projectScripts[i];
