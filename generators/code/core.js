@@ -1,36 +1,19 @@
-// code.js
 
-// --- Shared State ---
-// These are exported so other modules (like assembler.js) can read them.
-// They are `const` so they cannot be reassigned, but their contents can be modified.
 export const modulePaths = [];
 export const modules = {};
-export const project = {}; // This will be populated with a 'project' property, e.g., { project: { ... } }
-
-/**
- * The main orchestration function.
- * It takes a project URL, fetches it, processes all its module dependencies,
- * and then uses a provided callback function to generate the final output.
- * @param {string} url - The URL to the project's main JS module file.
- * @param {function} exportCodeFunction - The function to call to generate the final code (e.g., assembler.exportCode).
- * @returns {Promise<string>} - A promise that resolves with the final generated code.
- */
+export const project = {};
 export async function processProject(url, exportCodeFunction) {
-    // 1. Reset state from any previous run.
     clearState();
 
-    // 2. Fetch the project module from the provided URL.
     const projModule = await import(url);
     if (!projModule.data || !projModule.data.project) {
         throw new Error("Project file is invalid. It must be an ES module with a named export 'data' containing a 'project' object.");
     }
 
-    // 3. Populate the shared state.
-    // We modify the 'project' object's properties, not reassign the const itself.
     project.project = projModule.data.project;
 
     // 4. Collect all module dependencies from the project data.
-    const projectModules = project.project.modules || [];
+    const projectModules = project.modules || [];
     for (const modulePath of projectModules) {
         updateImports(modulePath);
     }
