@@ -13,7 +13,7 @@ export const main = {
     },
     
     blocks: {
-        make: {
+        push: {
             text: "%type to console %input",
             generate: function(args) {
                 return `console[${args.type}](${args.input})`
