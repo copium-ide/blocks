@@ -67,10 +67,8 @@ async function handleAssembly() {
 
     try {
         log(`Starting assembly for project: ${url}`);
-        
-        // Delegate all the complex logic to the processProject function in code.js.
-        // We pass the assembler's export function as a callback.
-        const finalCode = await core.processProject(url, assembler.exportCode);
+        core.processProject();
+        const finalCode = await assembler.exportCode();
 
         // Display the result.
         outputEl.textContent = finalCode;
@@ -85,4 +83,4 @@ async function handleAssembly() {
     }
 }
 
-assembleBtn.addEventListener('click', handleAssembly);
+assembleBtn.addEventListener('click', handleAssembly());
