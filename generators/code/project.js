@@ -6,8 +6,9 @@ export const data = {
     namespace: "testproj"
   },
   modules: [
-    "./default/math.js",
-    "https://cdn.jsdelivr.net/gh/copium-ide/blocks/generators/code/default/variables.js"
+    "https://cdn.jsdelivr.net/gh/copium-ide/blocks/generators/code/default/math.js",
+    "https://cdn.jsdelivr.net/gh/copium-ide/blocks/generators/code/default/variables.js",
+    "https://cdn.jsdelivr.net/gh/copium-ide/blocks/generators/code/default/console.js"
   ],
   project: {
     assets: {},
