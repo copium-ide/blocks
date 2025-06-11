@@ -19,20 +19,34 @@ export const data = {
           {
             block: "copium-ide.vars.make",
             inputs: {
-            type: {value: "String"},
+            type: {value: "Number"},
             name: {value: "Bingus"},
-            value: {value: " says hello"}
+            value: {value: 1}
             }
           },
           {
             block: "copium-ide.vars.make",
             inputs: {
-              type: {value: "String"},
+              type: {value: "Number"},
               name: {value: "Boingus"},
               value: {
                 block: "copium-ide.vars.get",
                 inputs: {
                   name: {value: "Bingus"}
+                }
+              }
+            }
+          },
+          {
+            block: "copium-ide.console.push",
+            inputs: {
+              type: {value: "log"},
+              input: {
+                block: "copium-ide.math.operator",
+                inputs: {
+                  input1: {value: "Bingus"},
+                  operator: {"+"},
+                  input2: {value: "Bingus"}
                 }
               }
             }
