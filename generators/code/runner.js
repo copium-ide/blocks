@@ -83,4 +83,4 @@ async function handleAssembly() {
     }
 }
 
-assembleBtn.addEventListener('click', handleAssembly());
+assembleBtn.addEventListener('click', handleAssembly);
