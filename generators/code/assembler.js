@@ -31,7 +31,7 @@ const Copium = {
 
     const generateCodeFromBlock = (blockData) => {
         if (blockData.hasOwnProperty('value')) {
-            return JSON.stringify(blockData.value);
+            return blockData.value;
         }
 
         if (blockData.hasOwnProperty('block')) {
