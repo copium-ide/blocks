@@ -1,7 +1,7 @@
 // --- STATE MANAGEMENT (Unchanged) ---
 export const modulePaths = [];
 export const modules = {};
-export const project = {};
+export let project = {};
 
 /**
  * A reusable helper to import from raw GitHub URLs.
@@ -37,10 +37,10 @@ export async function processProject(url) {
         throw new Error("Project file is invalid. It must be an ES module with a named export 'data' containing a 'project' object.");
     }
 
-    project.project = projModule.data.project; // Note: Corrected to access project object
+    project = projModule.data; // Note: Corrected to access project object
 
     // Collect all module dependencies from the project data.
-    const projectModules = project.project.modules || [];
+    const projectModules = project.modules || [];
     for (const modulePath of projectModules) {
         updateImports(modulePath);
     }
