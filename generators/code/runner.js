@@ -44,19 +44,10 @@ function clearLogs() {
 
 // --- Main Application Logic ---
 async function handleAssembly() {
-    // Note: You must convert raw GitHub URLs to a CDN URL like jsDelivr
-    // Example: https://raw.githubusercontent.com/... -> https://cdn.jsdelivr.net/gh/...
     let url = projectUrlInput.value.trim();
     if (!url) {
         alert("Please enter a project URL.");
         return;
-    }
-
-    // Automatically convert raw GitHub URLs
-    if (url.startsWith('https://raw.githubusercontent.com/')) {
-        const newUrl = 'https://cdn.jsdelivr.net/gh/' + url.substring('https://raw.githubusercontent.com/'.length).replace('/main/', '@latest/');
-        log(`Converting GitHub URL to jsDelivr: ${newUrl}`);
-        url = newUrl;
     }
 
 
