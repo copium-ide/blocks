@@ -1,3 +1,4 @@
+// Matter.js (not this file, this: https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js) is licensed under MIT. See here: https://github.com/liabru/matter-js
 export const main = {
     info: {
         author: `copium-ide`,
