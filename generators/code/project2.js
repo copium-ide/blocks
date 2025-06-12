@@ -6,7 +6,7 @@ export const data = {
     namespace: `mattertest`
   },
   modules: [
-    // This path assumes your matter extension is at this standard location.
+    // Assuming the self-contained matter extension is at this standard location.
     `https://raw.githubusercontent.com/copium-ide/blocks/main/generators/code/default/matter.js`, 
     
     // Standard console module for logging.
@@ -23,7 +23,9 @@ export const data = {
             block: `copium-ide.console.push`,
             inputs: {
               type: {value: `log`},
-              input: {value: `Starting the infinite bouncing ball simulation...`}
+              // THIS IS THE FIX: The string value is now properly quoted
+              // so it will be treated as a string literal in the final code.
+              input: {value: `"Starting the infinite bouncing ball simulation..."`}
             }
           },
           // Create the walls for the 800x600 canvas.
