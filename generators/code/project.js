@@ -8,7 +8,7 @@ export const data = {
   modules: [
     `https://raw.githubusercontent.com/copium-ide/blocks/refs/heads/main/generators/code/default/math.js`,
     `https://raw.githubusercontent.com/copium-ide/blocks/refs/heads/main/generators/code/default/variables.js`,
-    `https://raw.githubusercontent.com/copium-ide/blocks/refs/heads/main/generators/code/default/console.jss`
+    `https://raw.githubusercontent.com/copium-ide/blocks/refs/heads/main/generators/code/default/console.js`
   ],
   project: {
     assets: {},
