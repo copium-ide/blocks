@@ -31,7 +31,7 @@ function initializeMatterWorld() {
     }
 
     // 2. Create the core Matter.js components
-    const engine = Matter.Engine.create();
+    const engine = await Matter.Engine.create();
     const world = engine.world;
     const render = Matter.Render.create({
         element: matterContainer,
