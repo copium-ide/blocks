@@ -16,7 +16,7 @@ export const main = {
         push: {
             text: `%type to console %input`,
             generate: function(args) {
-                return `console[${args.type}](${args.input})`
+                return `console.${args.type}(${args.input})`
             },
             inputs: {
                 type: [`log`,`warn`,`error`],
