@@ -1,43 +1,66 @@
-
+// --- STATE MANAGEMENT (Unchanged) ---
 export const modulePaths = [];
 export const modules = {};
 export const project = {};
+
+/**
+ * A reusable helper to import from raw GitHub URLs.
+ */
+async function importFromRawUrl(url) {
+  // ... (The helper function from above) ...
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status} for URL ${url}`);
+    }
+    const codeAsText = await response.text();
+    const blob = new Blob([codeAsText], { type: 'application/javascript' });
+    const blobUrl = URL.createObjectURL(blob);
+    const module = await import(blobUrl);
+    URL.revokeObjectURL(blobUrl);
+    return module;
+  } catch (error) {
+    console.error(`Failed to import module from ${url}:`, error);
+    throw error;
+  }
+}
+
+// --- CORE LOGIC (Updated) ---
+
 export async function processProject(url) {
     clearState();
 
-    const projModule = await import(url);
+    // MODIFICATION: Use the helper for the main project file.
+    const projModule = await importFromRawUrl(url); 
+
     if (!projModule.data || !projModule.data.project) {
         throw new Error("Project file is invalid. It must be an ES module with a named export 'data' containing a 'project' object.");
     }
 
-    project.project = projModule.data;
+    project.project = projModule.data.project; // Note: Corrected to access project object
 
-    // 4. Collect all module dependencies from the project data.
+    // Collect all module dependencies from the project data.
     const projectModules = project.project.modules || [];
     for (const modulePath of projectModules) {
         updateImports(modulePath);
     }
     console.log("Found project modules to load:", projectModules);
-    // 5. Import all collected modules at once.
+    
+    // Import all collected modules at once.
     await importModules();
 }
 
 /**
- * Resets the shared state, clearing all data from previous runs.
+ * Resets the shared state. (Unchanged)
  */
 function clearState() {
-    modulePaths.length = 0; // The correct way to clear a const array.
-    // The correct way to clear a const object.
-    for (const key in modules) {
-        delete modules[key];
-    }
-    // Clear the project data.
+    modulePaths.length = 0;
+    for (const key in modules) { delete modules[key]; }
     delete project.project;
 }
 
 /**
- * Adds a module path to the list if it's not already there.
- * @param {string} path - The URL path to the module.
+ * Adds a module path to the list. (Unchanged)
  */
 function updateImports(path) {
     if (!modulePaths.includes(path)) {
@@ -46,30 +69,27 @@ function updateImports(path) {
 }
 
 /**
- * Imports all modules listed in the modulePaths array and populates the `modules` object.
+ * Imports all modules listed in the modulePaths array. (Updated)
  */
 async function importModules() {
-    const importPromises = modulePaths.map(path => import(path));
+    // MODIFICATION: Use the helper for each dependency.
+    const importPromises = modulePaths.map(path => importFromRawUrl(path));
 
-    // Use Promise.allSettled to wait for all imports to finish, regardless of success or failure.
     const results = await Promise.allSettled(importPromises);
 
     results.forEach((result, index) => {
-        const path = modulePaths[index]; // Get the original path for error logging
+        const path = modulePaths[index];
 
-        // Check if the promise was fulfilled (successful)
         if (result.status === 'fulfilled') {
             const mod = result.value;
-            // Add defensive checks for the module's structure
             if (mod && mod.main && mod.main.info) {
                 const { author, namespace } = mod.main.info;
 
                 if (!author || !namespace) {
                     console.warn(`Module at ${path} is missing author or namespace in its info.`);
-                    return; // Skip this module
+                    return;
                 }
 
-                // Create author namespace if it doesn't exist
                 if (!modules.hasOwnProperty(author)) {
                     modules[author] = {};
                 }
@@ -78,19 +98,15 @@ async function importModules() {
                  console.warn(`Module at ${path} has an invalid structure and will be skipped.`);
             }
         } 
-        // The promise was rejected (failed)
         else {
-            console.error(`Failed to import module at ${path}: ${result.reason}`);
+            // The error is already logged in importFromRawUrl, but we can add context.
+            console.error(`The import process for module at ${path} failed.`);
         }
     });
 }
+
 /**
- * A utility function to retrieve a specific block function from a loaded module.
- * @param {string} author
- * @param {string} namespace
- * @param {string} func - The name of the block function.
- * @param {object} args - The arguments for the block function.
- * @returns The result of the block function call.
+ * A utility function to retrieve and execute a block function. (Unchanged)
  */
 export function Generate(author, namespace, func, args) {
     if (!modules[author] || !modules[author][namespace] || !modules[author][namespace].blocks[func]) {
