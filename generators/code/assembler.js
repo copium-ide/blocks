@@ -15,7 +15,7 @@ const Copium = {
     env: {
         version: "Copium-Lite",
     },
-    assets: ${JSON.stringify(core.project.project.assets || {}, null, 2)},
+    assets: ${core.project.project.assets},
 };
 `;
 
