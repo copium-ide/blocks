@@ -50,7 +50,7 @@ export const data = {
                       name: {value: "Bingus"}
                     }
                   },
-                  operator: {"+"},
+                  operator: {value: "+"},
                   input2: {
                     block: "copium-ide.vars.get",
                     inputs: {
