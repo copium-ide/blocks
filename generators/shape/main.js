@@ -1,6 +1,6 @@
-import * as blocks from './generators/shape/blocks.js';
-import * as svg from './generators/shape/svg.js';
-import * as drag from './snapping/drag.js'
+import * as blocks from './blocks.js';
+import * as svg from './svg.js';
+import * as drag from '../../snapping/drag.js'
 
 var workSpace = {};
 var blockSpace = {};
