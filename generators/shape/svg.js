@@ -1,4 +1,15 @@
 export function generate(shapeData, svgElement) {
+    // --- EDIT START: Preserve existing transform ---
+    let existingTransform = '';
+    // Find the current path element within the SVG, if it exists.
+    const oldPath = svgElement.querySelector('path');
+    if (oldPath) {
+        // Store its CSS transform style. This is what makeDraggable modifies.
+        existingTransform = oldPath.style.transform;
+    }
+    // --- EDIT END ---
+
+    // Now, we can safely clear the SVG's content
     svgElement.innerHTML = '';
 
     if (!shapeData.points || !Array.isArray(shapeData.points) || shapeData.points.length < 2) {
@@ -11,7 +22,7 @@ export function generate(shapeData, svgElement) {
     const points = shapeData.points;
     const numPoints = points.length;
     const defaultCornerRadius = 0;
-    const bezierControlPointFactor = 0.55;
+    const bezierControlPointFactor = 0.55; // Approximation for a circular arc
 
     // Helper functions
     const getVector = (p1, p2) => ({ x: p2.x - p1.x, y: p2.y - p1.y });
@@ -23,11 +34,10 @@ export function generate(shapeData, svgElement) {
     const scaleVector = (v, scalar) => ({ x: v.x * scalar, y: v.y * scalar });
     const addVectors = (v1, v2) => ({ x: v1.x + v2.x, y: v1.y + v2.y });
 
-    // Begin path with the first point (or tangent if rounded)
+    // --- Path generation logic remains the same ---
     const firstPoint = points[0];
     let initialCornerRadius = firstPoint.cornerRadius !== undefined ? Math.max(0, firstPoint.cornerRadius) : defaultCornerRadius;
     if (initialCornerRadius > 0 && numPoints > 1) {
-        // Calculate initial tangent point for first point
         const prevPoint = points[points.length - 1];
         const vectorPrev = getVector(prevPoint, firstPoint);
         const lenPrev = getLength(vectorPrev);
@@ -39,7 +49,6 @@ export function generate(shapeData, svgElement) {
         d += `M ${firstPoint.x},${firstPoint.y} `;
     }
 
-    // Process each point in the shape data
     for (let i = 0; i < numPoints; i++) {
         const currentPoint = points[i];
         const prevPoint = points[(i - 1 + numPoints) % numPoints];
@@ -47,36 +56,23 @@ export function generate(shapeData, svgElement) {
         const cornerRadius = currentPoint.cornerRadius !== undefined ? Math.max(0, currentPoint.cornerRadius) : defaultCornerRadius;
 
         if (cornerRadius <= 0) {
-            // No rounded corner, simply draw a line
-            if (i > 0) {
-                d += `L ${currentPoint.x},${currentPoint.y} `;
-            }
+            d += `L ${currentPoint.x},${currentPoint.y} `;
         } else {
-            // Calculate vectors and tangents for rounded corners
             const vectorPrev = getVector(prevPoint, currentPoint);
             const vectorNext = getVector(currentPoint, nextPoint);
-
             const lenPrev = getLength(vectorPrev);
             const lenNext = getLength(vectorNext);
-
-            const normalizedPrev = normalize(vectorPrev);
-            const normalizedNext = normalize(vectorNext);
-
-            // Limit the corner radius so it doesn't exceed half the length of the adjacent segments
             const limitedRadius = Math.min(cornerRadius, lenPrev / 2, lenNext / 2);
-
-            // Determine start and end tangent points along the segments
             const startTangentPoint = addVectors(currentPoint, scaleVector(normalizedPrev, -limitedRadius));
             const endTangentPoint = addVectors(currentPoint, scaleVector(normalizedNext, limitedRadius));
 
-            if (i > 0) {
-                d += `L ${startTangentPoint.x},${startTangentPoint.y} `;
-            } else {
-                // For the very first point if it’s rounded, move to the start tangent point
+            if (i === 0 && d.startsWith('M')) {
+                // If first point is rounded, we need to correct the initial M command
                 d = `M ${startTangentPoint.x},${startTangentPoint.y} `;
+            } else {
+                 d += `L ${startTangentPoint.x},${startTangentPoint.y} `;
             }
 
-            // Compute control points for the cubic Bezier curve
             const controlPoint1 = addVectors(
                 startTangentPoint,
                 scaleVector(normalize(getVector(startTangentPoint, currentPoint)), limitedRadius * bezierControlPointFactor)
@@ -89,39 +85,51 @@ export function generate(shapeData, svgElement) {
             d += `C ${controlPoint1.x},${controlPoint1.y} ${controlPoint2.x},${controlPoint2.y} ${endTangentPoint.x},${endTangentPoint.y} `;
         }
     }
-
-    // Close the path if desired
+    // Closing the path to the correct starting point for rounded corners
     if (shapeData.closePath !== false) {
         d += "Z";
     }
+    // --- End of path generation logic ---
 
-    // Set the path's "d" attribute
     path.setAttribute('d', d);
 
-    // Use strokeWidth from shapeData if available
     if (shapeData.strokeWidth !== undefined) {
         path.setAttribute('stroke-width', shapeData.strokeWidth);
     }
-
-    // Apply additional attributes from shapeData to the path element
     for (const key in shapeData) {
-        if (key !== 'points' && shapeData.hasOwnProperty(key) && key !== 'strokeWidth') {
+        // Ensure not to overwrite attributes we've explicitly handled or shouldn't be attributes
+        const handledKeys = ['points', 'strokeWidth', 'closePath'];
+        if (shapeData.hasOwnProperty(key) && !handledKeys.includes(key)) {
             path.setAttribute(key, shapeData[key]);
         }
     }
 
+    // --- EDIT START: Restore the transform ---
+    // Apply the saved transform to the new path. If no transform existed, this will be an empty string.
+    path.style.transform = existingTransform;
+    // --- EDIT END ---
+
     svgElement.appendChild(path);
 
-    const bBox = svgElement.getBBox()
-    const viewBoxX = bBox.x;
-    const viewBoxY = bBox.y;
-    const viewBoxWidth = bBox.width;
-    const viewBoxHeight = bBox.height;
-    const zoom = 10;
+    // --- EDIT START: Use path's BBox and reframe the SVG ---
+    // Calculate the bounding box of the newly created path. This is more accurate.
+    // Note: getBBox is calculated *before* CSS transforms are applied.
+    const bBox = path.getBBox(); 
+    const padding = 10; // Add some padding around the shape
 
+    const viewBoxX = bBox.x - padding;
+    const viewBoxY = bBox.y - padding;
+    const viewBoxWidth = bBox.width + (padding * 2);
+    const viewBoxHeight = bBox.height + (padding * 2);
+
+    // This section re-frames the entire SVG to fit the new shape.
     svgElement.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
-    svgElement.style.setProperty('width', `${viewBoxWidth*zoom}px`);
-    svgElement.style.setProperty('height', `${viewBoxHeight*zoom}px`);
-    svgElement.style.setProperty('position', `absolute`);
-    svgElement.style.setProperty('overflow', `visible`);
+    
+    // This resizes the SVG element itself in the DOM. You may or may not want this behavior.
+    const zoom = 1; // Set a zoom factor for the display size
+    svgElement.style.width = `${viewBoxWidth * zoom}px`;
+    svgElement.style.height = `${viewBoxHeight * zoom}px`;
+    svgElement.style.position = 'absolute';
+    svgElement.style.overflow = 'visible';
+    // --- EDIT END ---
 }
