@@ -99,7 +99,7 @@ export function generate(shapeData, svgElement) {
     svgElement.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
     
     // Optional: Resize the SVG DOM element
-    const zoom = 1; 
+    const zoom = 10; 
     svgElement.style.width = `${viewBoxWidth * zoom}px`;
     svgElement.style.height = `${viewBoxHeight * zoom}px`;
     svgElement.style.position = 'absolute';
