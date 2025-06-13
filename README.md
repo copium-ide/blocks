@@ -8,4 +8,6 @@ Status:
 > Code compiler: done.
 > Frontend: incomplete (~10%)
 <br>
-https://copium-ide.github.io/blocks/
+https://copium-ide.github.io/blocks/generators/shape
+<br>
+https://copium-ide.github.io/blocks/generators/code
