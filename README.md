@@ -5,6 +5,7 @@ Attention developers: I've noticed this repo gets cloned quite a bit, so if you'
 Status:
 > Extensions, done.
 > Block rendering: Incomplete (~70%)
-> Code compiler: Incomplete (~30%)
+> Code compiler: done.
+> Frontend: incomplete (~10%)
 <br>
 https://copium-ide.github.io/blocks/
