@@ -1,5 +1,5 @@
 export function generate(shapeData, svgElement) {
-    // Preserve existing transform from the SVG element itself, not a child path
+    // Preserve existing transform from the SVG element itself
     let existingTransform = svgElement.style.transform || '';
 
     svgElement.innerHTML = '';
@@ -26,7 +26,7 @@ export function generate(shapeData, svgElement) {
     const scaleVector = (v, scalar) => ({ x: v.x * scalar, y: v.y * scalar });
     const addVectors = (v1, v2) => ({ x: v1.x + v2.x, y: v1.y + v2.y });
 
-    // --- Path Generation Loop ---
+    // --- Path Generation Loop (This part is unchanged) ---
     for (let i = 0; i < numPoints; i++) {
         const currentPoint = points[i];
         const prevPoint = points[(i - 1 + numPoints) % numPoints];
@@ -39,7 +39,6 @@ export function generate(shapeData, svgElement) {
         const lenPrev = getLength(vectorPrev);
         const lenNext = getLength(vectorNext);
 
-        // Limit radius to prevent segment overlap
         const limitedRadius = Math.min(cornerRadius, lenPrev / 2, lenNext / 2);
 
         const normalizedPrev = normalize(vectorPrev);
@@ -71,35 +70,48 @@ export function generate(shapeData, svgElement) {
 
     path.setAttribute('d', d);
 
-    // Apply attributes, but ignore keys that are not valid SVG attributes.
+    // ====================================================================
+    // --- NEW STABILIZED VIEWBOX AND SIZING LOGIC ---
+    // ====================================================================
+
+    // Temporarily add path to DOM to measure it accurately
+    svgElement.appendChild(path);
+    const bBox = path.getBBox();
+    svgElement.removeChild(path); // Remove it again before re-adding it with transforms
+
+    const padding = shapeData.strokeWidth ? Number(shapeData.strokeWidth) : 2; 
+
+    // Calculate the translation needed to move the shape's top-left corner to the padding origin
+    const translateX = -bBox.x + padding;
+    const translateY = -bBox.y + padding;
+
+    // The new viewBox will always start at 0,0
+    const viewBoxWidth = bBox.width + (padding * 2);
+    const viewBoxHeight = bBox.height + (padding * 2);
+
+    svgElement.setAttribute('viewBox', `0 0 ${viewBoxWidth} ${viewBoxHeight}`);
+    
+    // Apply a transform to the PATH to position it correctly inside the stable viewBox
+    path.setAttribute('transform', `translate(${translateX}, ${translateY})`);
+    
+    // Set the on-screen size of the SVG element based on the viewBox dimensions and a zoom factor.
+    // This maintains a consistent visual scale for all blocks.
+    const zoom = 10;
+    svgElement.style.width = `${viewBoxWidth * zoom}px`;
+    svgElement.style.height = `${viewBoxHeight * zoom}px`;
+
+    // Apply other attributes from shapeData to the path
     if (shapeData.strokeWidth !== undefined) {
         path.setAttribute('stroke-width', shapeData.strokeWidth);
     }
     for (const key in shapeData) {
-        // ADDED 'snapPoints' to this list
         const handledKeys = ['points', 'strokeWidth', 'closePath', 'snapPoints'];
         if (shapeData.hasOwnProperty(key) && !handledKeys.includes(key)) {
             path.setAttribute(key, shapeData[key]);
         }
     }
     
+    // Re-append the final, transformed path and restore the SVG element's transform
     svgElement.appendChild(path);
-    svgElement.style.transform = existingTransform; // Restore transform to the parent SVG
-
-    // Re-frame the SVG's viewBox based on the new path's BBox
-    const bBox = path.getBBox();
-    const padding = shapeData.strokeWidth ? Number(shapeData.strokeWidth) : 2; 
-
-    const viewBoxX = bBox.x - padding;
-    const viewBoxY = bBox.y - padding;
-    const viewBoxWidth = bBox.width + (padding * 2);
-    const viewBoxHeight = bBox.height + (padding * 2);
-
-    svgElement.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
-    
-    // Set a reasonable default size for the SVG element in the DOM.
-    // This can be overridden by CSS.
-    const zoom = 1;
-    svgElement.style.width = `${viewBoxWidth * zoom}px`;
-    svgElement.style.height = `${viewBoxHeight * zoom}px`;
+    svgElement.style.transform = existingTransform;
 }
