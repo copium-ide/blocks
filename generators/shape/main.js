@@ -2,144 +2,137 @@ import * as blocks from './blocks.js';
 import * as svg from './svg.js';
 import * as drag from './drag.js';
 
-// ====================================================================
-// NEW: Define our application's scale.
-// This is our "Pixels Per Unit" setting.
-// 1 means 1 internal unit = 1 CSS pixel.
-// A value of 5-10 is good for desktop interaction.
 const APP_SCALE = 5; 
-// ====================================================================
 
+const workSpace = document.getElementById('workspace'); 
+const blockSpace = {};
+let targetID = null;
 
-// The main SVG workspace where all blocks live.
-// IMPORTANT: Create this in your HTML: <svg id="workspace"></svg>
-var workSpace = document.getElementById('workspace'); 
-var blockSpace = {};
+/**
+ * Sets the workspace viewBox to match its pixel dimensions.
+ * This creates a 1 unit = 1 pixel coordinate system.
+ * It should be called on load and on window resize.
+ */
+function setupWorkspaceViewBox() {
+    const box = workSpace.getBoundingClientRect();
+    workSpace.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
+}
 
-var targetID = null; // The UUID of the currently selected block in the UI.
-
-// Callback function for drag.js to update a block's position in our central state.
 function onBlockPositionUpdate(uuid, newTransform) {
   if (blockSpace[uuid]) {
     blockSpace[uuid].transform = newTransform;
   }
 }
 
-// createBlock now stores transform and snap points, and appends to the workspace.
 function createBlock(type, colors = { inner: "#FFFFFF", outer: "#000000" }) {
   const uuid = crypto.randomUUID();
   if (blockSpace.hasOwnProperty(uuid)) {
-    console.warn("Duplicate UUID found:", uuid);
     return createBlock(type, colors);
-  } else {
-    const sizes = [{ height: 1, width: 1, loop: { height: 1 } }];
-    // The block's data model, including its current position.
-    const block = { 
-        type: type, 
-        uuid: uuid, 
-        colors: colors, 
-        sizes: sizes, 
-        transform: { x: 420, y: 20 } // Initial position to the right of controls
-    };
-    
-    const shapeData = blocks.Block(type, colors, sizes);
-    block.snapPoints = shapeData.snapPoints; // Store snap points on the block object.
-    
-    blockSpace[uuid] = block;
-
-    const blockELM = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
-    blockELM.id = uuid;
-    blockELM.setAttribute("blocktype", type);
-    blockELM.style.transform = `translate(${block.transform.x}px, ${block.transform.y}px)`;
-    
-    // Append to the main workspace, not the body.
-    workSpace.appendChild(blockELM);
-    
-    generateShape(uuid, type, colors, sizes);
-
-    populateSelector(blockSpace);
-    document.getElementById('blockType').value = uuid;
-    targetID = uuid;
-    updateDimensionSliders();
-    return block;
   }
+
+  const sizes = [{ height: 1, width: 1, loop: { height: 1 } }];
+  const block = { 
+      type: type, 
+      uuid: uuid, 
+      colors: colors, 
+      sizes: sizes, 
+      transform: { x: 420, y: 50 } // Represents the (x, y) attributes now
+  };
+  
+  const shapeData = blocks.Block(type, colors, sizes);
+  block.snapPoints = shapeData.snapPoints;
+  blockSpace[uuid] = block;
+
+  const blockELM = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
+  blockELM.id = uuid;
+  blockELM.setAttribute("blocktype", type);
+  // Set position using SVG attributes, not CSS transform
+  blockELM.setAttribute('x', block.transform.x);
+  blockELM.setAttribute('y', block.transform.y);
+  
+  // Append the new block SVG *inside* the main workspace SVG
+  workSpace.appendChild(blockELM);
+  
+  generateShape(uuid, type, colors, sizes);
+
+  populateSelector(blockSpace);
+  document.getElementById('blockType').value = uuid;
+  targetID = uuid;
+  updateDimensionSliders();
+  return block;
 }
 
 function removeBlock(uuid) {
-  if (blockSpace.hasOwnProperty(uuid)) {
-    delete blockSpace[uuid];
-    const blockELM = document.getElementById(uuid);
-    if (blockELM) {
-      blockELM.remove();
-    }
-    populateSelector(blockSpace);
-    // If the removed block was selected, select another one or clear sliders.
-    if (targetID === uuid) {
-        const remainingKeys = Object.keys(blockSpace);
-        if (remainingKeys.length > 0) {
-            targetID = remainingKeys[0];
-            document.getElementById('blockType').value = targetID;
-            updateDimensionSliders();
-        } else {
-            targetID = null;
-            clearSliders();
+    if (blockSpace.hasOwnProperty(uuid)) {
+        delete blockSpace[uuid];
+        const blockELM = document.getElementById(uuid);
+        if (blockELM) blockELM.remove();
+        
+        if (targetID === uuid) {
+            const remainingKeys = Object.keys(blockSpace);
+            targetID = remainingKeys.length > 0 ? remainingKeys[0] : null;
+            if(targetID) {
+                document.getElementById('blockType').value = targetID;
+                updateDimensionSliders();
+            } else {
+                clearSliders();
+            }
         }
+        populateSelector(blockSpace);
     }
-  } else {
-    console.warn("Block with UUID", uuid, "not found.");
-  }
 }
 
 function editBlock(uuid, type, colors, sizes) {
-  if (blockSpace.hasOwnProperty(uuid)) { 
+    if (!blockSpace[uuid]) return;
+    
     const block = blockSpace[uuid];
     block.type = type;
     block.colors = colors;
     block.sizes = sizes;
-
-    // Re-calculate snap points when the block's shape changes.
+    
     const shapeData = blocks.Block(type, colors, sizes);
     block.snapPoints = shapeData.snapPoints;
 
-    const blockELM = document.getElementById(uuid);
-    if (blockELM) {
-      blockELM.setAttribute("blocktype", type);
-      // Pass the APP_SCALE here as well
-      generateShape(uuid, type, colors, sizes);
-    }
-  } else {
-    console.warn("Block with UUID", uuid, "not found.");
-  }
+    generateShape(uuid, type, colors, sizes);
 }
 
-function getBlock(uuid, parameter) {
-  if (blockSpace.hasOwnProperty(uuid)) { 
-    const block = blockSpace[uuid];
-    return block[parameter];
-  } else {
-    console.warn("Block with UUID", uuid, "not found.");
-    return null;
-  }
-}
-
-// MODIFIED: This function now passes the scale factor down.
 function generateShape(uuid, type, colors, sizes) {
-  const shapeData = blocks.Block(type, colors, sizes);
-  // Pass the APP_SCALE to the svg.generate function
-  svg.generate(shapeData, document.getElementById(uuid), APP_SCALE);
+    const shapeData = blocks.Block(type, colors, sizes);
+    const blockElm = document.getElementById(uuid);
+    if (blockElm) {
+        svg.generate(shapeData, blockElm, APP_SCALE);
+    }
 }
 
 function populateSelector(obj) {
   const selectElement = document.getElementById('blockType');
-  selectElement.innerHTML = ''; // Clear existing options
+  const currentVal = selectElement.value;
+  selectElement.innerHTML = '';
   for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
-      const option = document.createElement('option');
-      option.value = key;
-      option.textContent = `${obj[key].type} (${key.substring(0, 8)})`; // More descriptive
-      selectElement.appendChild(option);
-    }
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = `${obj[key].type} (${key.substring(0, 8)})`;
+    selectElement.appendChild(option);
   }
+  // Try to restore the previously selected value
+  if (obj[currentVal]) {
+      selectElement.value = currentVal;
+  }
+}
+
+// --- All UI and event listener functions remain the same ---
+// (No changes needed for updateDimensionSliders, clearSliders, updateBlockColor, etc.)
+// ... (Your existing UI functions) ...
+
+// --- INITIALIZATION ---
+if (workSpace) {
+    setupWorkspaceViewBox();
+    window.addEventListener('resize', setupWorkspaceViewBox);
+
+    drag.makeDraggable(workSpace, blockSpace, onBlockPositionUpdate);
+    createBlock("hat");
+} else {
+    console.error("The <svg id='workspace'> element was not found.");
 }
 
 // --- UI Element References and Event Listeners ---
@@ -296,11 +289,3 @@ document.getElementById('remove').addEventListener('click', function() {
     removeBlock(targetID);
   }
 });
-
-// --- INITIALIZATION ---
-if (workSpace) {
-    drag.makeDraggable(workSpace, blockSpace, onBlockPositionUpdate);
-    createBlock("hat");
-} else {
-    console.error("The <svg id='workspace'> element was not found. Draggable functionality will not work.");
-}

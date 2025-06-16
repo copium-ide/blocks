@@ -5,22 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>blocks</title>
   <style>
-    /* Corrected CSS for the application layout */
-    body {
-      font-family: sans-serif;
+    body, html {
       margin: 0;
-      background-color: #f0f0f0;
+      padding: 0;
+      overflow: hidden; /* Prevent scrollbars */
+      background-color: #e0e0e0;
     }
+    /* The "mother SVG" fills the entire screen */
+    #workspace {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+    }
+    /* The controls panel floats on top of the workspace */
     #controls-container {
       position: absolute;
       top: 10px;
       left: 10px;
-      background: #fff;
+      background: #ffffff;
       padding: 15px;
       border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
       z-index: 10;
       width: 350px;
+      max-height: 95vh;
+      overflow-y: auto;
     }
     #controls-container label, #controls-container button, #controls-container input, #controls-container select {
       display: block;
@@ -28,48 +39,43 @@
       box-sizing: border-box;
       margin-bottom: 8px;
     }
-    #workspace {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 1; /* Behind the controls */
-    }
+    hr { margin: 15px 0; border: 1px solid #eee; border-top: none; }
     .branch-slider {
       border: 1px solid #ccc;
       padding: 10px;
       margin: 10px 0;
       border-radius: 4px;
     }
-    a {
-        display: block;
-        margin-bottom: 15px;
-        text-align: center;
+    /* Child SVGs (the blocks) are positioned absolutely within the parent */
+    svg[blocktype] {
+        overflow: visible;
+        cursor: grab;
+    }
+    svg[blocktype].active {
+        cursor: grabbing;
+        opacity: 0.8;
+        filter: drop-shadow(0 0 10px rgba(0, 150, 255, 0.7));
     }
   </style>
 </head>
 <body>
-    <!-- The main SVG workspace needs to be at the top level for z-index stacking -->
-    <svg id="workspace"></svg>
     
+    <!-- This is the "mother SVG" -->
+    <svg id="workspace"></svg>
+
     <div id="controls-container">
-        <a href="https://discord.gg/33TUH3pxnP" target="_blank">join my server now! :3</a>
-        
-        <!-- This div now holds all the controls -->
+        <a href="https://discord.gg/33TUH3pxnP" target="_blank" style="text-align: center;">join my server now! :3</a>
+        <hr>
         <div id="controls">
-            <!-- This is the wrapper div the JavaScript is looking for -->
             <div id="main-sliders">
                 <label>Main Height:</label>
                 <input id="h" type="range" min="0.5" max="10" step="0.1" value="1" />
-        
                 <label>Main Width:</label>
                 <input id="w" type="range" min="0.5" max="10" step="0.1" value="1" />
             </div>
             <hr>
             <div>
                 <label>Colors:</label>
-                <!-- Changed to type="color" for a better user experience -->
                 <input id="color1" type="color" value="#4A90E2" />
                 <input id="color2" type="color" value="#196ECF" />
             </div>
@@ -83,8 +89,6 @@
                     <option>number</option>
                     <option>string</option>
                     <option>boolean</option>
-                    <option>array</option>
-                    <option>object</option>
                 </select>
             </div>
             <div>
@@ -94,18 +98,13 @@
             <hr>
             <input id="create" type="button" value="Create New Block" />
             <input id="remove" type="button" value="Remove Selected" />
-            
-            <!-- Container for dynamic branch sliders -->
             <div id="sliders"></div>
-            
             <button id="addBranch">Add Branch</button>
         </div>
     </div>
 
-    <!-- Eruda and your main script -->
     <script src="../../eruda.js"></script>
     <script>eruda.init();</script>
-    <!-- Removed invalid 'content' attribute -->
     <script type="module" src="./main.js"></script>
 </body>
 </html>
