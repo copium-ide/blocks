@@ -1,141 +1,177 @@
 /**
- * Makes SVG elements draggable using CSS transforms.
+ * Makes SVG elements draggable with snapping functionality.
+ * This should be initialized on a single parent SVG that contains all draggable blocks.
  *
- * @param {SVGElement} svgElement The main SVG container element.
+ * @param {SVGElement} svgContainer The main SVG container element where blocks are rendered.
+ * @param {object} allBlocks A reference to the object containing all block data, including their snap points and current transforms.
+ * @param {function} onPositionUpdate A callback function `(uuid, newTransform)` to be called when a block is moved.
  * @returns {function} A cleanup function to remove all event listeners.
  */
-export function makeDraggable(svgElement) {
+export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
+  const SNAP_RADIUS = 20; // The distance in SVG units to trigger a snap.
+
   let isDragging = false;
-  let selectedElement = null;
-  let offset = { x: 0, y: 0 }; // Stores offset between click point and element's translation origin
+  let selectedElement = null; // The <svg> element of the block being dragged
+  let offset = { x: 0, y: 0 }; // Offset between click and element's transform origin
+  let lastSnap = null; // Store information about the last successful snap
 
   /**
-   * Converts mouse or touch event coordinates to SVG's coordinate system.
-   * This is crucial for correctly handling zoom and pan on the SVG.
+   * Converts mouse or touch event coordinates to the container SVG's coordinate system.
    */
   function getSVGCoordinates(event) {
-    const pt = svgElement.createSVGPoint();
+    const pt = svgContainer.createSVGPoint();
 
-    // Standardize coordinate source based on event type
     if (event.touches && event.touches.length > 0) {
       pt.x = event.touches[0].clientX;
       pt.y = event.touches[0].clientY;
-    } else if (event.changedTouches && event.changedTouches.length > 0) { // For touchend
+    } else if (event.changedTouches && event.changedTouches.length > 0) {
       pt.x = event.changedTouches[0].clientX;
       pt.y = event.changedTouches[0].clientY;
-    } else { // For mouse events (mousedown, mousemove, mouseup)
+    } else {
       pt.x = event.clientX;
       pt.y = event.clientY;
     }
 
-    // Get the transformation matrix that maps screen coordinates to SVG coordinates
-    const ctm = svgElement.getScreenCTM();
+    const ctm = svgContainer.getScreenCTM();
     if (!ctm) {
-        // This can happen if the SVG is not in the DOM or is display:none
-        console.error("SVG getScreenCTM is not available.");
-        return { x: 0, y: 0 };
+      console.error("SVG getScreenCTM is not available.");
+      return { x: 0, y: 0 };
     }
-    
-    // Apply the inverse transformation to get the point in SVG space
-    const svgP = pt.matrixTransform(ctm.inverse());
-    return { x: svgP.x, y: svgP.y };
-  }
 
+    return pt.matrixTransform(ctm.inverse());
+  }
+  
   /**
    * Gets the current X and Y translation from an element's CSS transform style.
-   * Parses the 'matrix(a, b, c, d, tx, ty)' value.
    */
   function getCurrentTranslation(element) {
     const style = window.getComputedStyle(element);
-    // Use 'transform' property, with fallbacks for older browsers
     const matrix = style.transform || style.webkitTransform || style.mozTransform;
 
-    // "none" is the default value when no transform is applied
     if (matrix === 'none' || !matrix) {
       return { x: 0, y: 0 };
     }
 
-    // The transform is returned as a matrix: "matrix(a, b, c, d, tx, ty)"
     const matrixValues = matrix.match(/matrix.*\((.+)\)/);
     if (matrixValues && matrixValues[1]) {
       const parts = matrixValues[1].split(',').map(s => parseFloat(s.trim()));
-      // tx is the 5th value (index 4), ty is the 6th value (index 5)
       if (parts.length === 6) {
         return { x: parts[4], y: parts[5] };
       }
     }
     
-    // Fallback if parsing fails (e.g., for 3D transforms or other complex functions)
     return { x: 0, y: 0 };
   }
 
-  function startDrag(event) {
-    // Only drag with the main mouse button (button 0) or a single touch
-    if (event.type === 'mousedown' && event.button !== 0) {
-      return;
+  /**
+   * Checks for proximity to any valid snap points on other blocks.
+   * @param {string} draggedBlockId - The UUID of the block being dragged.
+   * @param {{x: number, y: number}} currentPos - The current mouse-driven position of the dragged block.
+   * @returns {{x: number, y: number}|null} - The new snapped position, or null if no snap occurred.
+   */
+  function checkForSnap(draggedBlockId, currentPos) {
+    const draggedBlockData = allBlocks[draggedBlockId];
+    if (!draggedBlockData || !draggedBlockData.snapPoints) return null;
+
+    // We only check the dragged block's male points against other blocks' female points.
+    const maleSnapPoints = draggedBlockData.snapPoints.filter(p => p.role === 'male');
+    if (maleSnapPoints.length === 0) return null;
+
+    let closestSnap = { distance: Infinity, position: null };
+
+    // Iterate through all other blocks to find a potential snap target.
+    for (const blockId in allBlocks) {
+      if (blockId === draggedBlockId) continue; // Don't snap to self
+
+      const staticBlockData = allBlocks[blockId];
+      const staticBlockTransform = staticBlockData.transform;
+      if (!staticBlockData.snapPoints || !staticBlockTransform) continue;
+      
+      const femaleSnapPoints = staticBlockData.snapPoints.filter(p => p.role === 'female');
+
+      for (const malePoint of maleSnapPoints) {
+        for (const femalePoint of femaleSnapPoints) {
+          // Check for compatible types (e.g., 'block' to 'block', 'string' to 'string')
+          if (malePoint.type === femalePoint.type) {
+            // Calculate the ideal position for the dragged block's origin (0,0)
+            // to make the male and female points align perfectly.
+            const targetX = staticBlockTransform.x + femalePoint.x - malePoint.x;
+            const targetY = staticBlockTransform.y + femalePoint.y - malePoint.y;
+
+            // Calculate distance from the current mouse-driven position to the ideal snap position.
+            const distance = Math.sqrt(Math.pow(currentPos.x - targetX, 2) + Math.pow(currentPos.y - targetY, 2));
+
+            if (distance < SNAP_RADIUS && distance < closestSnap.distance) {
+              closestSnap = {
+                distance,
+                position: { x: targetX, y: targetY }
+              };
+            }
+          }
+        }
+      }
     }
+    
+    // Return the position of the closest valid snap point, or null if none are in range.
+    return closestSnap.position;
+  }
 
-    // Find the target element that should be dragged.
-    // Can be a path, rect, circle, or a group <g> element.
+  function startDrag(event) {
+    if (event.type === 'mousedown' && event.button !== 0) return;
+
+    // Use event delegation: find the draggable block SVG from the click target.
     const target = event.target;
-    const potentialElement = target.closest('path, rect, circle, g, text');
+    const potentialElement = target.closest('svg[blocktype]');
 
-    // Ensure the found element is a direct child or descendant of our target SVG
-    if (potentialElement && svgElement.contains(potentialElement)) {
+    if (potentialElement && svgContainer.contains(potentialElement)) {
       isDragging = true;
       selectedElement = potentialElement;
-      selectedElement.classList.add('active'); // Add class for visual feedback (e.g., cursor, outline)
+      selectedElement.classList.add('active');
 
       const startPoint = getSVGCoordinates(event);
-      const currentTranslation = getCurrentTranslation(selectedElement);
+      // Use the centrally-stored transform from `allBlocks` as the source of truth.
+      const currentTranslation = allBlocks[selectedElement.id]?.transform || { x: 0, y: 0 };
       
-      // Calculate the offset from the element's translated origin to the mouse click point.
-      // This ensures the element doesn't "jump" to the cursor on drag start.
+      // Calculate offset so the block doesn't jump to the cursor.
       offset.x = startPoint.x - currentTranslation.x;
       offset.y = startPoint.y - currentTranslation.y;
+      
+      lastSnap = null; // Clear previous snap on new drag.
 
-      // Attach move and end listeners to the window, not the element.
-      // This allows dragging to continue even if the cursor leaves the element's bounds.
+      // Global listeners ensure smooth dragging even if the cursor leaves the element.
       window.addEventListener('mousemove', drag);
       window.addEventListener('mouseup', endDrag);
-      window.addEventListener('touchmove', drag, { passive: false }); // passive:false is needed to call preventDefault()
+      window.addEventListener('touchmove', drag, { passive: false });
       window.addEventListener('touchend', endDrag);
-      window.addEventListener('blur', endDrag); // Stop dragging if the window loses focus
+      window.addEventListener('blur', endDrag); // Stop drag if window loses focus.
       
-      // Prevent default browser behavior (e.g., text selection, image ghosting).
-      // On touch devices, this also prevents scrolling.
-      if (event.cancelable) {
-        event.preventDefault();
-      }
+      if (event.cancelable) event.preventDefault();
     }
   }
 
   function drag(event) {
-    if (!isDragging || !selectedElement) {
-      return;
-    }
-
-    // Prevent default actions during drag (like text selection or page scroll on touch)
-    if (event.cancelable) {
-        event.preventDefault();
-    }
+    if (!isDragging || !selectedElement) return;
+    if (event.cancelable) event.preventDefault();
     
     const coord = getSVGCoordinates(event);
-    const newX = coord.x - offset.x;
-    const newY = coord.y - offset.y;
+    const mouseDrivenPos = {
+      x: coord.x - offset.x,
+      y: coord.y - offset.y
+    };
 
-    // Apply the new position by updating the CSS transform property.
-    // This is hardware-accelerated in most browsers and is more performant than
-    // changing SVG attributes like 'x', 'y', or the 'transform' attribute.
-    selectedElement.style.transform = `translate(${newX}px, ${newY}px)`;
+    // Check if we should snap, and get the snapped position if so.
+    const snappedPos = checkForSnap(selectedElement.id, mouseDrivenPos);
+    lastSnap = snappedPos; // Keep track of the snap state for endDrag.
+
+    // Use the snapped position if available, otherwise use the mouse position.
+    const finalPos = snappedPos || mouseDrivenPos;
+    
+    selectedElement.style.transform = `translate(${finalPos.x}px, ${finalPos.y}px)`;
   }
 
-  function endDrag(event) {
-    if (!isDragging) {
-      return;
-    }
+  function endDrag() {
+    if (!isDragging) return;
 
-    // Clean up all window-level event listeners
     window.removeEventListener('mousemove', drag);
     window.removeEventListener('mouseup', endDrag);
     window.removeEventListener('touchmove', drag);
@@ -143,24 +179,31 @@ export function makeDraggable(svgElement) {
     window.removeEventListener('blur', endDrag);
     
     if (selectedElement) {
+      // If we ended on a snap, update the block's permanent position in the central state.
+      if (lastSnap && onPositionUpdate) {
+        onPositionUpdate(selectedElement.id, lastSnap);
+      } else if (onPositionUpdate) {
+        // Even if not snapped, update to its new free-floating position.
+        const finalTransform = getCurrentTranslation(selectedElement);
+        onPositionUpdate(selectedElement.id, finalTransform);
+      }
       selectedElement.classList.remove('active');
     }
 
-    // Reset state variables
+    // Reset state for the next drag operation.
     isDragging = false;
     selectedElement = null;
+    lastSnap = null;
   }
 
-  // --- Initial Setup ---
-  // Attach the starting listeners to the SVG element itself.
-  svgElement.addEventListener('mousedown', startDrag);
-  svgElement.addEventListener('touchstart', startDrag, { passive: false }); // passive:false to allow preventDefault
+  // Attach starting listeners to the main SVG container.
+  svgContainer.addEventListener('mousedown', startDrag);
+  svgContainer.addEventListener('touchstart', startDrag, { passive: false });
 
-  // Return a cleanup function to allow the user to disable dragging later
+  // Return a cleanup function to allow the user to disable dragging later.
   return function cleanup() {
-    svgElement.removeEventListener('mousedown', startDrag);
-    svgElement.removeEventListener('touchstart', startDrag);
-
+    svgContainer.removeEventListener('mousedown', startDrag);
+    svgContainer.removeEventListener('touchstart', startDrag);
     // In case dragging is active when cleanup is called, remove window listeners too.
     window.removeEventListener('mousemove', drag);
     window.removeEventListener('mouseup', endDrag);
@@ -169,43 +212,3 @@ export function makeDraggable(svgElement) {
     window.removeEventListener('blur', endDrag);
   };
 }
-
-// =======================
-//      EXAMPLE USAGE
-// =======================
-
-/*
-// In your HTML:
-// <svg id="my-svg-element" viewBox="0 0 400 300">
-//   <g id="draggable-group">
-//     <rect x="150" y="100" width="100" height="100" fill="royalblue" />
-//     <circle cx="200" cy="150" r="20" fill="white" />
-//   </g>
-//   <rect class="draggable-rect" x="20" y="20" width="80" height="80" fill="crimson" />
-// </svg>
-
-// In your CSS:
-// svg .active {
-//   cursor: grabbing;
-//   opacity: 0.8;
-//   outline: 2px dashed steelblue;
-// }
-// svg g, svg .draggable-rect {
-//   cursor: grab;
-// }
-
-
-// In your JavaScript:
-const mySVG = document.getElementById('my-svg-element');
-if (mySVG) {
-    // To make specific elements draggable, you can adjust the selector inside startDrag:
-    // For example: target.closest('g, .draggable-rect');
-    const cleanupDraggable = makeDraggable(mySVG);
-  
-    // Later, if you need to disable dragging:
-    // document.getElementById('stop-button').onclick = () => {
-    //   cleanupDraggable();
-    //   console.log('Dragging has been disabled.');
-    // };
-}
-*/

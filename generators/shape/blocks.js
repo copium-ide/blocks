@@ -23,10 +23,6 @@ export function Block(type, colors, sizes) {
             return inputs.input(colors, sizes, 'object');
         default:
             console.warn("Block type not recognized:", type);
-            return {};
+            return { points: [], snapPoints: [] }; // Return a valid empty shape
     }
 }
-
-  
-  
-  

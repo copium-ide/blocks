@@ -1,15 +1,11 @@
 export function generate(shapeData, svgElement) {
-    // Preserve existing transform
-    let existingTransform = '';
-    const oldPath = svgElement.querySelector('path');
-    if (oldPath) {
-        existingTransform = oldPath.style.transform;
-    }
+    // Preserve existing transform from the SVG element itself, not a child path
+    let existingTransform = svgElement.style.transform || '';
 
     svgElement.innerHTML = '';
 
-    if (!shapeData.points || !Array.isArray(shapeData.points) || shapeData.points.length < 2) {
-        console.error("Invalid shape data: points must be an array with at least 2 points.");
+    if (!shapeData || !shapeData.points || !Array.isArray(shapeData.points) || shapeData.points.length < 2) {
+        console.error("Invalid shape data: points must be an array with at least 2 points.", shapeData);
         return;
     }
 
@@ -43,6 +39,7 @@ export function generate(shapeData, svgElement) {
         const lenPrev = getLength(vectorPrev);
         const lenNext = getLength(vectorNext);
 
+        // Limit radius to prevent segment overlap
         const limitedRadius = Math.min(cornerRadius, lenPrev / 2, lenNext / 2);
 
         const normalizedPrev = normalize(vectorPrev);
@@ -55,8 +52,6 @@ export function generate(shapeData, svgElement) {
             const normalizedNext = normalize(vectorNext);
             const endTangentPoint = addVectors(currentPoint, scaleVector(normalizedNext, limitedRadius));
 
-            // --- THIS IS THE CORRECTED CONTROL POINT LOGIC ---
-            // It correctly calculates the control points relative to the corner vertex.
             const controlPoint1 = addVectors(
                 startTangentPoint,
                 scaleVector(normalize(getVector(startTangentPoint, currentPoint)), limitedRadius * bezierControlPointFactor)
@@ -65,7 +60,6 @@ export function generate(shapeData, svgElement) {
                 endTangentPoint,
                 scaleVector(normalize(getVector(endTangentPoint, currentPoint)), limitedRadius * bezierControlPointFactor)
             );
-            // --- END OF CORRECTION ---
             
             d += `C ${controlPoint1.x},${controlPoint1.y} ${controlPoint2.x},${controlPoint2.y} ${endTangentPoint.x},${endTangentPoint.y} `;
         }
@@ -77,20 +71,22 @@ export function generate(shapeData, svgElement) {
 
     path.setAttribute('d', d);
 
-    // Apply attributes, restore transform, and append
+    // Apply attributes, but ignore keys that are not valid SVG attributes.
     if (shapeData.strokeWidth !== undefined) {
         path.setAttribute('stroke-width', shapeData.strokeWidth);
     }
     for (const key in shapeData) {
-        const handledKeys = ['points', 'strokeWidth', 'closePath'];
+        // ADDED 'snapPoints' to this list
+        const handledKeys = ['points', 'strokeWidth', 'closePath', 'snapPoints'];
         if (shapeData.hasOwnProperty(key) && !handledKeys.includes(key)) {
             path.setAttribute(key, shapeData[key]);
         }
     }
-    path.style.transform = existingTransform;
+    
     svgElement.appendChild(path);
+    svgElement.style.transform = existingTransform; // Restore transform to the parent SVG
 
-    // Re-frame the SVG based on the new path's BBox
+    // Re-frame the SVG's viewBox based on the new path's BBox
     const bBox = path.getBBox();
     const padding = shapeData.strokeWidth ? Number(shapeData.strokeWidth) : 2; 
 
@@ -101,9 +97,9 @@ export function generate(shapeData, svgElement) {
 
     svgElement.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
     
+    // Set a reasonable default size for the SVG element in the DOM.
+    // This can be overridden by CSS.
     const zoom = 10;
     svgElement.style.width = `${viewBoxWidth * zoom}px`;
     svgElement.style.height = `${viewBoxHeight * zoom}px`;
-    svgElement.style.position = 'absolute';
-    svgElement.style.overflow = 'visible';
 }
