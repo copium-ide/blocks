@@ -2,6 +2,15 @@ import * as blocks from './blocks.js';
 import * as svg from './svg.js';
 import * as drag from './drag.js';
 
+// ====================================================================
+// NEW: Define our application's scale.
+// This is our "Pixels Per Unit" setting.
+// 1 means 1 internal unit = 1 CSS pixel.
+// A value of 5-10 is good for desktop interaction.
+const APP_SCALE = 5; 
+// ====================================================================
+
+
 // The main SVG workspace where all blocks live.
 // IMPORTANT: Create this in your HTML: <svg id="workspace"></svg>
 var workSpace = document.getElementById('workspace'); 
@@ -30,7 +39,7 @@ function createBlock(type, colors = { inner: "#FFFFFF", outer: "#000000" }) {
         uuid: uuid, 
         colors: colors, 
         sizes: sizes, 
-        transform: { x: 20, y: 20 } // Initial position
+        transform: { x: 420, y: 20 } // Initial position to the right of controls
     };
     
     const shapeData = blocks.Block(type, colors, sizes);
@@ -95,6 +104,7 @@ function editBlock(uuid, type, colors, sizes) {
     const blockELM = document.getElementById(uuid);
     if (blockELM) {
       blockELM.setAttribute("blocktype", type);
+      // Pass the APP_SCALE here as well
       generateShape(uuid, type, colors, sizes);
     }
   } else {
@@ -112,9 +122,11 @@ function getBlock(uuid, parameter) {
   }
 }
 
+// MODIFIED: This function now passes the scale factor down.
 function generateShape(uuid, type, colors, sizes) {
   const shapeData = blocks.Block(type, colors, sizes);
-  svg.generate(shapeData, document.getElementById(uuid));
+  // Pass the APP_SCALE to the svg.generate function
+  svg.generate(shapeData, document.getElementById(uuid), APP_SCALE);
 }
 
 function populateSelector(obj) {
@@ -126,13 +138,11 @@ function populateSelector(obj) {
       option.value = key;
       option.textContent = `${obj[key].type} (${key.substring(0, 8)})`; // More descriptive
       selectElement.appendChild(option);
-      targetID = key; // Set the targetID to the last block created
     }
   }
 }
 
 // --- UI Element References and Event Listeners ---
-
 var hinput = document.getElementById("h");
 var winput = document.getElementById("w");
 var typeinput = document.getElementById("type");
@@ -147,9 +157,9 @@ function updateDimensionSliders() {
     const currentBlock = blockSpace[targetID];
     const type = currentBlock.type;
 
-    // Show/hide main H/W sliders based on block type.
+    const mainSliders = document.getElementById('main-sliders');
     const isBranchBlock = ['block', 'hat', 'end'].includes(type);
-    document.getElementById('main-sliders').style.display = isBranchBlock ? 'block' : 'none';
+    if(mainSliders) mainSliders.style.display = isBranchBlock ? 'block' : 'none';
 
     if (isBranchBlock) {
         hinput.value = currentBlock.sizes[0].height;
@@ -190,7 +200,6 @@ function updateDimensionSliders() {
       slidersContainer.appendChild(branchDiv);
     });
     
-    // Attach event listeners for all dimension inputs
     document.querySelectorAll(".branch-input").forEach(input => {
       input.addEventListener("input", function() {
         if (!targetID || !blockSpace[targetID]) return;
@@ -212,7 +221,6 @@ function updateDimensionSliders() {
       });
     });
     
-    // Attach event listeners for remove branch buttons
     document.querySelectorAll(".remove-branch").forEach(button => {
       button.addEventListener("click", function() {
         if (!targetID || !blockSpace[targetID]) return;
@@ -246,7 +254,7 @@ typeinput.onchange = function() {
   if (targetID && blockSpace[targetID]) {
     const type = typeinput.options[typeinput.selectedIndex].text;
     editBlock(targetID, type, blockSpace[targetID].colors, blockSpace[targetID].sizes);
-    updateDimensionSliders(); // Sliders might need to change for new type
+    updateDimensionSliders();
   }
 };
 
@@ -291,10 +299,7 @@ document.getElementById('remove').addEventListener('click', function() {
 
 // --- INITIALIZATION ---
 if (workSpace) {
-    // Initialize the single draggable instance on the main workspace.
     drag.makeDraggable(workSpace, blockSpace, onBlockPositionUpdate);
-
-    // Create the first block.
     createBlock("hat");
 } else {
     console.error("The <svg id='workspace'> element was not found. Draggable functionality will not work.");

@@ -1,4 +1,5 @@
-export function generate(shapeData, svgElement) {
+// MODIFIED: The function now accepts a 'scale' parameter.
+export function generate(shapeData, svgElement, scale = 1) {
     // Preserve existing transform from the SVG element itself
     let existingTransform = svgElement.style.transform || '';
 
@@ -26,7 +27,7 @@ export function generate(shapeData, svgElement) {
     const scaleVector = (v, scalar) => ({ x: v.x * scalar, y: v.y * scalar });
     const addVectors = (v1, v2) => ({ x: v1.x + v2.x, y: v1.y + v2.y });
 
-    // --- Path Generation Loop (This part is unchanged) ---
+    // --- Path Generation Loop ---
     for (let i = 0; i < numPoints; i++) {
         const currentPoint = points[i];
         const prevPoint = points[(i - 1 + numPoints) % numPoints];
@@ -69,11 +70,7 @@ export function generate(shapeData, svgElement) {
     }
 
     path.setAttribute('d', d);
-
-    // ====================================================================
-    // --- NEW STABILIZED VIEWBOX AND SIZING LOGIC ---
-    // ====================================================================
-
+    
     // Temporarily add path to DOM to measure it accurately
     svgElement.appendChild(path);
     const bBox = path.getBBox();
@@ -81,24 +78,21 @@ export function generate(shapeData, svgElement) {
 
     const padding = shapeData.strokeWidth ? Number(shapeData.strokeWidth) : 2; 
 
-    // Calculate the translation needed to move the shape's top-left corner to the padding origin
     const translateX = -bBox.x + padding;
     const translateY = -bBox.y + padding;
 
-    // The new viewBox will always start at 0,0
     const viewBoxWidth = bBox.width + (padding * 2);
     const viewBoxHeight = bBox.height + (padding * 2);
 
     svgElement.setAttribute('viewBox', `0 0 ${viewBoxWidth} ${viewBoxHeight}`);
     
-    // Apply a transform to the PATH to position it correctly inside the stable viewBox
     path.setAttribute('transform', `translate(${translateX}, ${translateY})`);
     
-    // Set the on-screen size of the SVG element based on the viewBox dimensions and a zoom factor.
-    // This maintains a consistent visual scale for all blocks.
-    const zoom = 10;
-    svgElement.style.width = `${viewBoxWidth * zoom}px`;
-    svgElement.style.height = `${viewBoxHeight * zoom}px`;
+    // ====================================================================
+    // MODIFIED: Use the 'scale' parameter instead of a hardcoded 'zoom'.
+    svgElement.style.width = `${viewBoxWidth * scale}px`;
+    svgElement.style.height = `${viewBoxHeight * scale}px`;
+    // ====================================================================
 
     // Apply other attributes from shapeData to the path
     if (shapeData.strokeWidth !== undefined) {
@@ -111,7 +105,6 @@ export function generate(shapeData, svgElement) {
         }
     }
     
-    // Re-append the final, transformed path and restore the SVG element's transform
     svgElement.appendChild(path);
     svgElement.style.transform = existingTransform;
 }
