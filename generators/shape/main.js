@@ -3,7 +3,7 @@ import * as svg from './svg.js';
 import * as drag from './drag.js';
 
 // --- CONFIGURATION ---
-const APP_SCALE = 5; 
+const APP_SCALE = 8; 
 
 // --- APPLICATION STATE ---
 const workSpace = document.getElementById('workspace'); 
