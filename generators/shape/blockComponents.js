@@ -5,7 +5,7 @@ export const CORNER_RADIUS = 0.5;
 export const NOTCH_RADIUS = 0.25;
 export const LOOP_OFFSET = 2;
 export const STROKE_WIDTH = 0.25;
-const NOTCH_CONNECT_X = 4; // The center X-coordinate for notch connections
+const NOTCH_CONNECT_X = 4;
 
 export function branch(colors, sizes, top, bottom) {
     // Initialize with points and snapPoints arrays

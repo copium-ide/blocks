@@ -5,64 +5,107 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>blocks</title>
   <style>
+    /* Corrected CSS for the application layout */
     body {
-      height: 100vh;
+      font-family: sans-serif;
+      margin: 0;
+      background-color: #f0f0f0;
+    }
+    #controls-container {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: #fff;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      z-index: 10;
+      width: 350px;
+    }
+    #controls-container label, #controls-container button, #controls-container input, #controls-container select {
+      display: block;
       width: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
+      box-sizing: border-box;
+      margin-bottom: 8px;
     }
-    #controls {
-      margin-bottom: 20px;
-    }
-    #sliders {
-      margin-top: 20px;
-      width: 300px;
+    #workspace {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1; /* Behind the controls */
     }
     .branch-slider {
       border: 1px solid #ccc;
       padding: 10px;
-      margin: 5px 0;
+      margin: 10px 0;
+      border-radius: 4px;
     }
-    .branch-slider button {
-      margin-top: 5px;
+    a {
+        display: block;
+        margin-bottom: 15px;
+        text-align: center;
     }
   </style>
 </head>
 <body>
-    <a href="https://discord.gg/33TUH3pxnP" target="_blank">join my server now! :3</a>
-    <div id="controls">
-        <label>h:</label>
-        <input id="h" type="range" min="0" max="2" step="0.1" value="1" />
-  
-        <label>w:</label>
-        <input id="w" type="range" min="0" max="2" step="0.1" value="1" />
-        <br />
-        <label>colors:</label>
-        <input id="color1" type="text" value="#ffffff" />
-        <input id="color2" type="text" value="#000000" />
-        <label>type:</label>
-        <select id="type">
-            <option value="block">block</option>
-            <option value="hat">hat</option>
-            <option value="end">end</option>
-            <option value="string">string</option>
-            <option value="number">number</option>
-            <option value="boolean">boolean</option>
-            <option value="array">array</option>
-            <option value="object">object</option>
-        </select>
-        <select id="blockType"></select>
-        <input id="create" type="button" value="create" />
-        <input id="remove" type="button" value="remove" />
-        <button id="addBranch">Add Branch</button>
-    </div>
+    <!-- The main SVG workspace needs to be at the top level for z-index stacking -->
     <svg id="workspace"></svg>
-    <!-- Container for dynamic branch sliders -->
-    <div id="sliders"></div>
+    
+    <div id="controls-container">
+        <a href="https://discord.gg/33TUH3pxnP" target="_blank">join my server now! :3</a>
+        
+        <!-- This div now holds all the controls -->
+        <div id="controls">
+            <!-- This is the wrapper div the JavaScript is looking for -->
+            <div id="main-sliders">
+                <label>Main Height:</label>
+                <input id="h" type="range" min="0.5" max="10" step="0.1" value="1" />
+        
+                <label>Main Width:</label>
+                <input id="w" type="range" min="0.5" max="10" step="0.1" value="1" />
+            </div>
+            <hr>
+            <div>
+                <label>Colors:</label>
+                <!-- Changed to type="color" for a better user experience -->
+                <input id="color1" type="color" value="#4A90E2" />
+                <input id="color2" type="color" value="#196ECF" />
+            </div>
+            <hr>
+            <div>
+                <label>Block Type:</label>
+                <select id="type">
+                    <option>hat</option>
+                    <option>block</option>
+                    <option>end</option>
+                    <option>number</option>
+                    <option>string</option>
+                    <option>boolean</option>
+                    <option>array</option>
+                    <option>object</option>
+                </select>
+            </div>
+            <div>
+                <label>Selected Block:</label>
+                <select id="blockType"></select>
+            </div>
+            <hr>
+            <input id="create" type="button" value="Create New Block" />
+            <input id="remove" type="button" value="Remove Selected" />
+            
+            <!-- Container for dynamic branch sliders -->
+            <div id="sliders"></div>
+            
+            <button id="addBranch">Add Branch</button>
+        </div>
+    </div>
+
+    <!-- Eruda and your main script -->
     <script src="../../eruda.js"></script>
     <script>eruda.init();</script>
-    <script content="text/javascript" type="module" src="./main.js"></script>
+    <!-- Removed invalid 'content' attribute -->
+    <script type="module" src="./main.js"></script>
 </body>
 </html>
