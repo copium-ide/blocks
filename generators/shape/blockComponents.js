@@ -1,162 +1,117 @@
-// constants, for all blocks
-export const BLOCK_HEIGHT = 6;
-export const BLOCK_WIDTH = 10;
-export const CORNER_RADIUS = 0.5;
-export const NOTCH_RADIUS = 0.25;
-export const LOOP_OFFSET = 2;
-export const STROKE_WIDTH = 0.25;
-const NOTCH_CONNECT_X = 4;
+export function generate(shapeData, svgElement) {
+    // Preserve existing transform from the SVG element itself
+    let existingTransform = svgElement.style.transform || '';
 
-export function branch(colors, sizes, top, bottom) {
-    // Initialize with points and snapPoints arrays
-    const finalShape = {points: [], snapPoints: [], ...footer(colors)};
+    svgElement.innerHTML = '';
 
-    // This block is from your original code.
-    if (sizes.length === 1) {
-        if (top === 'notch') {
-            finalShape.points.push(
-                {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
-                ...notch(0, 0, true),
-            );
-            // Add the female snap point for the top notch
-            finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: 0, type: 'block', role: 'female' });
-        } else if (top === 'hat') {
-            finalShape.points.push(
-                {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
-                ...hat(0, 0),
-            );
-        } else if (top === 'flat') {
-            finalShape.points.push(
-                {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
-            );
-        }
-    }
-    let finalOffset = 0;
-  
-    // This is your original loop for multi-branch blocks.
-    for (let i = 0; i < sizes.length-1; i++) {
-      let shape = []; // Changed from `let shape;` to avoid potential errors
-      const size = sizes[i];
-      const dHeight = size.height * BLOCK_HEIGHT;
-      const dWidth = size.width * BLOCK_WIDTH;
-      const bHeight = size.loop.height * BLOCK_HEIGHT;
-  
-      let offset = 0;
-      for (let j = 0; j < i; j++) {
-        offset += (sizes[j].height + sizes[j].loop.height) * BLOCK_HEIGHT;
-      }
-  
-      if (i === 0) {
-        if (top === 'notch') {
-            shape = [
-                {x: 0, y: 0 + offset, cornerRadius: CORNER_RADIUS},
-                ...notch(0, 0 + offset, true),
-                ...block(0, dWidth, dHeight),
-                ...loop(0 + offset+dHeight, bHeight),
-            ];
-            // Add the female snap point for the top notch (only on the first branch)
-            finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: 0, type: 'block', role: 'female' });
-        } else if (top === 'hat') {
-            shape = [
-                {x: 0, y: 0 + offset, cornerRadius: CORNER_RADIUS},
-                ...hat(0, 0 + offset, true),
-                ...block(0, dWidth, dHeight),
-                ...loop(0 + offset+dHeight, bHeight),
-            ];
-        } else if (top === 'flat') {
-            shape = [
-                {x: 0, y: 0 + offset, cornerRadius: CORNER_RADIUS},
-                ...block(0, dWidth, dHeight),
-                ...loop(0 + offset+dHeight, bHeight),
-            ];
-        }
-      } else {
-        shape = [
-          ...block(offset, dWidth, dHeight),
-          ...loop(0 + offset+dHeight, bHeight),
-        ];
-      }
-      
-      // Add snap points for the C-shaped loop
-      // A male snap point inside the loop to connect a nested stack.
-      finalShape.snapPoints.push({ x: LOOP_OFFSET + NOTCH_CONNECT_X, y: offset + dHeight, type: 'block', role: 'male' });
-      // A female snap point below the loop for the next branch in this stack.
-      finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: offset + dHeight + bHeight, type: 'block', role: 'female' });
-  
-      finalShape.points.push(...shape);
-      finalOffset = offset + dHeight + bHeight;
+    if (!shapeData || !shapeData.points || !Array.isArray(shapeData.points) || shapeData.points.length < 2) {
+        console.error("Invalid shape data: points must be an array with at least 2 points.", shapeData);
+        return;
     }
 
-    // This is your original logic for the last branch in the stack.
-    let lastShape = [];
-    let dHeight = sizes[sizes.length-1].height * BLOCK_HEIGHT;
-    let dWidth = sizes[sizes.length-1].width * BLOCK_WIDTH;
-    if (bottom === 'notch') {
-        lastShape = [
-            ...block(finalOffset, dWidth, dHeight),
-            ...notch(0, 0 + finalOffset+dHeight, false),
-            {x: 0, y: 0 + finalOffset+dHeight, cornerRadius: CORNER_RADIUS},
-        ];
-        // Add the male snap point for the bottom notch
-        finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: finalOffset + dHeight, type: 'block', role: 'male' });
-    } else if (bottom === 'flat') {
-        lastShape = [
-            ...block(finalOffset, dWidth, dHeight),
-            {x: 0, y: 0 + finalOffset+dHeight, cornerRadius: CORNER_RADIUS},
-        ];
-    }
-    finalShape.points.push(...lastShape);
-  
-    return finalShape;
-}
-function loop(offset = 0, h = 0) {
-    return [
-        ...notch(LOOP_OFFSET, offset, false),
-        {x: LOOP_OFFSET, y: offset, cornerRadius: CORNER_RADIUS},
-        {x: LOOP_OFFSET, y: h+offset, cornerRadius: CORNER_RADIUS},
-        ...notch(LOOP_OFFSET, h+offset, true),
-    ];
-}
-function notch(x = 0, y = 0, inverted = false) {
-    if (inverted == true) {
-        return [
-            {x: 2+x, y: 0+y, cornerRadius: NOTCH_RADIUS},
-            {x: 3+x, y: 1+y, cornerRadius: NOTCH_RADIUS},
-            {x: 5+x, y: 1+y, cornerRadius: NOTCH_RADIUS},
-            {x: 6+x, y: 0+y, cornerRadius: NOTCH_RADIUS}
-        ];
-    } else {
-        return [
-            {x: 6+x, y: 0+y, cornerRadius: NOTCH_RADIUS},
-            {x: 5+x, y: 1+y, cornerRadius: NOTCH_RADIUS},
-            {x: 3+x, y: 1+y, cornerRadius: NOTCH_RADIUS},
-            {x: 2+x, y: 0+y, cornerRadius: NOTCH_RADIUS}
-        ];
-    }
-}
+    const path = document.createElementNS("http://www.w3.org/2000/svg", 'path');
+    let d = "";
+    const points = shapeData.points;
+    const numPoints = points.length;
+    const defaultCornerRadius = 0;
+    const bezierControlPointFactor = 0.55228; 
 
-function hat(x = 0, y = 0) {
-    return [
-        {x: 2+x, y: 0+y, cornerRadius: CORNER_RADIUS},
-        {x: 3+x, y: -1-y, cornerRadius: 5},
-        {x: 7+x, y: -1-y, cornerRadius: 5},
-        {x: 8+x, y: 0+y, cornerRadius: CORNER_RADIUS}
-    ];
-}
-
-function block(offset = 0, w = BLOCK_WIDTH, h = BLOCK_HEIGHT) {
-    return [
-        {x: w, y: offset, cornerRadius: CORNER_RADIUS},
-        {x: w, y: h+offset, cornerRadius: CORNER_RADIUS},
-    ]
-}
-
-function footer(colors) {
-    return {
-        fill: colors.inner,
-        stroke: colors.outer,
-        strokeWidth: STROKE_WIDTH,
-        strokeLinejoin: "round",
-        closePath: true
+    // Helper functions
+    const getVector = (p1, p2) => ({ x: p2.x - p1.x, y: p2.y - p1.y });
+    const getLength = (v) => Math.sqrt(v.x * v.x + v.y * v.y);
+    const normalize = (v) => {
+        const len = getLength(v);
+        return len === 0 ? { x: 0, y: 0 } : { x: v.x / len, y: v.y / len };
     };
+    const scaleVector = (v, scalar) => ({ x: v.x * scalar, y: v.y * scalar });
+    const addVectors = (v1, v2) => ({ x: v1.x + v2.x, y: v1.y + v2.y });
+
+    // --- Path Generation Loop (This part is unchanged) ---
+    for (let i = 0; i < numPoints; i++) {
+        const currentPoint = points[i];
+        const prevPoint = points[(i - 1 + numPoints) % numPoints];
+        const nextPoint = points[(i + 1) % numPoints];
+        
+        const cornerRadius = currentPoint.cornerRadius !== undefined ? Math.max(0, currentPoint.cornerRadius) : defaultCornerRadius;
+
+        const vectorPrev = getVector(prevPoint, currentPoint);
+        const vectorNext = getVector(currentPoint, nextPoint);
+        const lenPrev = getLength(vectorPrev);
+        const lenNext = getLength(vectorNext);
+
+        const limitedRadius = Math.min(cornerRadius, lenPrev / 2, lenNext / 2);
+
+        const normalizedPrev = normalize(vectorPrev);
+        const startTangentPoint = addVectors(currentPoint, scaleVector(normalizedPrev, -limitedRadius));
+
+        const command = (i === 0) ? 'M' : 'L';
+        d += `${command} ${startTangentPoint.x},${startTangentPoint.y} `;
+
+        if (limitedRadius > 0) {
+            const normalizedNext = normalize(vectorNext);
+            const endTangentPoint = addVectors(currentPoint, scaleVector(normalizedNext, limitedRadius));
+
+            const controlPoint1 = addVectors(
+                startTangentPoint,
+                scaleVector(normalize(getVector(startTangentPoint, currentPoint)), limitedRadius * bezierControlPointFactor)
+            );
+            const controlPoint2 = addVectors(
+                endTangentPoint,
+                scaleVector(normalize(getVector(endTangentPoint, currentPoint)), limitedRadius * bezierControlPointFactor)
+            );
+            
+            d += `C ${controlPoint1.x},${controlPoint1.y} ${controlPoint2.x},${controlPoint2.y} ${endTangentPoint.x},${endTangentPoint.y} `;
+        }
+    }
+
+    if (shapeData.closePath !== false) {
+        d += "Z";
+    }
+
+    path.setAttribute('d', d);
+
+    // ====================================================================
+    // --- NEW STABILIZED VIEWBOX AND SIZING LOGIC ---
+    // ====================================================================
+
+    // Temporarily add path to DOM to measure it accurately
+    svgElement.appendChild(path);
+    const bBox = path.getBBox();
+    svgElement.removeChild(path); // Remove it again before re-adding it with transforms
+
+    const padding = shapeData.strokeWidth ? Number(shapeData.strokeWidth) : 2; 
+
+    // Calculate the translation needed to move the shape's top-left corner to the padding origin
+    const translateX = -bBox.x + padding;
+    const translateY = -bBox.y + padding;
+
+    // The new viewBox will always start at 0,0
+    const viewBoxWidth = bBox.width + (padding * 2);
+    const viewBoxHeight = bBox.height + (padding * 2);
+
+    svgElement.setAttribute('viewBox', `0 0 ${viewBoxWidth} ${viewBoxHeight}`);
+    
+    // Apply a transform to the PATH to position it correctly inside the stable viewBox
+    path.setAttribute('transform', `translate(${translateX}, ${translateY})`);
+    
+    // Set the on-screen size of the SVG element based on the viewBox dimensions and a zoom factor.
+    // This maintains a consistent visual scale for all blocks.
+    const zoom = 10;
+    svgElement.style.width = `${viewBoxWidth * zoom}px`;
+    svgElement.style.height = `${viewBoxHeight * zoom}px`;
+
+    // Apply other attributes from shapeData to the path
+    if (shapeData.strokeWidth !== undefined) {
+        path.setAttribute('stroke-width', shapeData.strokeWidth);
+    }
+    for (const key in shapeData) {
+        const handledKeys = ['points', 'strokeWidth', 'closePath', 'snapPoints'];
+        if (shapeData.hasOwnProperty(key) && !handledKeys.includes(key)) {
+            path.setAttribute(key, shapeData[key]);
+        }
+    }
+    
+    // Re-append the final, transformed path and restore the SVG element's transform
+    svgElement.appendChild(path);
+    svgElement.style.transform = existingTransform;
 }
