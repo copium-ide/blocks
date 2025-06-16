@@ -2,18 +2,30 @@ import * as blocks from './blocks.js';
 import * as svg from './svg.js';
 import * as drag from './drag.js';
 
+// --- CONFIGURATION ---
 const APP_SCALE = 5; 
 
+// --- APPLICATION STATE ---
 const workSpace = document.getElementById('workspace'); 
 const blockSpace = {};
 let targetID = null;
 
+// MOVED: All UI element variables are now declared at the top of the script.
+// This ensures they are available to all functions when the script runs.
+const hinput = document.getElementById("h");
+const winput = document.getElementById("w");
+const typeinput = document.getElementById("type");
+const uuidinput = document.getElementById("blockType");
+const color1input = document.getElementById("color1");
+const color2input = document.getElementById("color2");
+const slidersContainer = document.getElementById("sliders");
+
 /**
  * Sets the workspace viewBox to match its pixel dimensions.
  * This creates a 1 unit = 1 pixel coordinate system.
- * It should be called on load and on window resize.
  */
 function setupWorkspaceViewBox() {
+    if (!workSpace) return;
     const box = workSpace.getBoundingClientRect();
     workSpace.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
 }
@@ -24,7 +36,7 @@ function onBlockPositionUpdate(uuid, newTransform) {
   }
 }
 
-function createBlock(type, colors = { inner: "#FFFFFF", outer: "#000000" }) {
+function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
   const uuid = crypto.randomUUID();
   if (blockSpace.hasOwnProperty(uuid)) {
     return createBlock(type, colors);
@@ -36,7 +48,7 @@ function createBlock(type, colors = { inner: "#FFFFFF", outer: "#000000" }) {
       uuid: uuid, 
       colors: colors, 
       sizes: sizes, 
-      transform: { x: 420, y: 50 } // Represents the (x, y) attributes now
+      transform: { x: 420, y: 50 }
   };
   
   const shapeData = blocks.Block(type, colors, sizes);
@@ -46,11 +58,9 @@ function createBlock(type, colors = { inner: "#FFFFFF", outer: "#000000" }) {
   const blockELM = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
   blockELM.id = uuid;
   blockELM.setAttribute("blocktype", type);
-  // Set position using SVG attributes, not CSS transform
   blockELM.setAttribute('x', block.transform.x);
   blockELM.setAttribute('y', block.transform.y);
   
-  // Append the new block SVG *inside* the main workspace SVG
   workSpace.appendChild(blockELM);
   
   generateShape(uuid, type, colors, sizes);
@@ -73,10 +83,8 @@ function removeBlock(uuid) {
             targetID = remainingKeys.length > 0 ? remainingKeys[0] : null;
             if(targetID) {
                 document.getElementById('blockType').value = targetID;
-                updateDimensionSliders();
-            } else {
-                clearSliders();
             }
+            updateDimensionSliders();
         }
         populateSelector(blockSpace);
     }
@@ -100,49 +108,24 @@ function generateShape(uuid, type, colors, sizes) {
     const shapeData = blocks.Block(type, colors, sizes);
     const blockElm = document.getElementById(uuid);
     if (blockElm) {
-        svg.generate(shapeData, blockElm, APP_SCALE);
+        // FIXED: The arguments are now in the correct order (element, data, scale).
+        svg.generate(blockElm, shapeData, APP_SCALE);
     }
 }
 
 function populateSelector(obj) {
-  const selectElement = document.getElementById('blockType');
-  const currentVal = selectElement.value;
-  selectElement.innerHTML = '';
+  const currentVal = uuidinput.value;
+  uuidinput.innerHTML = '';
   for (const key in obj) {
     const option = document.createElement('option');
     option.value = key;
     option.textContent = `${obj[key].type} (${key.substring(0, 8)})`;
-    selectElement.appendChild(option);
+    uuidinput.appendChild(option);
   }
-  // Try to restore the previously selected value
   if (obj[currentVal]) {
-      selectElement.value = currentVal;
+      uuidinput.value = currentVal;
   }
 }
-
-// --- All UI and event listener functions remain the same ---
-// (No changes needed for updateDimensionSliders, clearSliders, updateBlockColor, etc.)
-// ... (Your existing UI functions) ...
-
-// --- INITIALIZATION ---
-if (workSpace) {
-    setupWorkspaceViewBox();
-    window.addEventListener('resize', setupWorkspaceViewBox);
-
-    drag.makeDraggable(workSpace, blockSpace, onBlockPositionUpdate);
-    createBlock("hat");
-} else {
-    console.error("The <svg id='workspace'> element was not found.");
-}
-
-// --- UI Element References and Event Listeners ---
-var hinput = document.getElementById("h");
-var winput = document.getElementById("w");
-var typeinput = document.getElementById("type");
-var uuidinput = document.getElementById("blockType");
-var color1input = document.getElementById("color1");
-var color2input = document.getElementById("color2");
-var slidersContainer = document.getElementById("sliders");
 
 function updateDimensionSliders() {
     clearSliders();
@@ -151,10 +134,13 @@ function updateDimensionSliders() {
     const type = currentBlock.type;
 
     const mainSliders = document.getElementById('main-sliders');
+    const addBranchBtn = document.getElementById('addBranch');
     const isBranchBlock = ['block', 'hat', 'end'].includes(type);
-    if(mainSliders) mainSliders.style.display = isBranchBlock ? 'block' : 'none';
+    
+    if (mainSliders) mainSliders.style.display = isBranchBlock ? 'block' : 'none';
+    if (addBranchBtn) addBranchBtn.style.display = isBranchBlock ? 'block' : 'none';
 
-    if (isBranchBlock) {
+    if (isBranchBlock && currentBlock.sizes[0]) {
         hinput.value = currentBlock.sizes[0].height;
         winput.value = currentBlock.sizes[0].width;
     }
@@ -229,7 +215,9 @@ function updateDimensionSliders() {
 }
 
 function clearSliders() {
-    slidersContainer.innerHTML = '';
+    if (slidersContainer) {
+        slidersContainer.innerHTML = '';
+    }
 }
 
 function updateBlockColor() {
@@ -240,52 +228,66 @@ function updateBlockColor() {
   }
 }
 
-color1input.addEventListener("input", updateBlockColor);
-color2input.addEventListener("input", updateBlockColor);
+// --- INITIALIZATION & EVENT LISTENERS ---
+if (workSpace) {
+    setupWorkspaceViewBox();
+    window.addEventListener('resize', setupWorkspaceViewBox);
 
-typeinput.onchange = function() {
-  if (targetID && blockSpace[targetID]) {
-    const type = typeinput.options[typeinput.selectedIndex].text;
-    editBlock(targetID, type, blockSpace[targetID].colors, blockSpace[targetID].sizes);
-    updateDimensionSliders();
-  }
-};
+    drag.makeDraggable(workSpace, blockSpace, onBlockPositionUpdate);
+    createBlock("hat");
 
-uuidinput.onchange = function() {
-  targetID = uuidinput.options[uuidinput.selectedIndex].value;
-  updateDimensionSliders();
-};
+    color1input.addEventListener("input", updateBlockColor);
+    color2input.addEventListener("input", updateBlockColor);
 
-hinput.oninput = function() {
-  if (targetID && blockSpace[targetID]) {
-    blockSpace[targetID].sizes[0].height = parseFloat(hinput.value);
-    updateDimensionSliders();
-    editBlock(targetID, blockSpace[targetID].type, blockSpace[targetID].colors, blockSpace[targetID].sizes);
-  }
-};
+    typeinput.addEventListener("change", () => {
+        if (targetID && blockSpace[targetID]) {
+            const block = blockSpace[targetID];
+            editBlock(targetID, typeinput.value, block.colors, block.sizes);
+            updateDimensionSliders();
+        }
+    });
 
-winput.oninput = function() {
-  if (targetID && blockSpace[targetID]) {
-    blockSpace[targetID].sizes[0].width = parseFloat(winput.value);
-    updateDimensionSliders();
-    editBlock(targetID, blockSpace[targetID].type, blockSpace[targetID].colors, blockSpace[targetID].sizes);
-  }
-};
+    uuidinput.addEventListener("change", () => {
+        targetID = uuidinput.value;
+        updateDimensionSliders();
+    });
 
-document.getElementById('addBranch').addEventListener('click', function() {
-  if (targetID && blockSpace[targetID]) {
-    blockSpace[targetID].sizes.push({ height: 1, width: 1, loop: { height: 1 } });
-    updateDimensionSliders();
-    editBlock(targetID, blockSpace[targetID].type, blockSpace[targetID].colors, blockSpace[targetID].sizes);
-  }
-});
+    hinput.addEventListener("input", () => {
+        if (targetID && blockSpace[targetID]) {
+            const block = blockSpace[targetID];
+            block.sizes[0].height = parseFloat(hinput.value);
+            updateDimensionSliders();
+            editBlock(targetID, block.type, block.colors, block.sizes);
+        }
+    });
 
-document.getElementById('create').addEventListener('click', function() {
-  createBlock(typeinput.options[typeinput.selectedIndex].text);
-});
+    winput.addEventListener("input", () => {
+        if (targetID && blockSpace[targetID]) {
+            const block = blockSpace[targetID];
+            block.sizes[0].width = parseFloat(winput.value);
+            updateDimensionSliders();
+            editBlock(targetID, block.type, block.colors, block.sizes);
+        }
+    });
 
-document.getElementById('remove').addEventListener('click', function() {
-  if (targetID) {
-    removeBlock(targetID);
-  }
-});
+    document.getElementById('addBranch').addEventListener('click', () => {
+        if (targetID && blockSpace[targetID]) {
+            blockSpace[targetID].sizes.push({ height: 1, width: 1, loop: { height: 1 } });
+            updateDimensionSliders();
+            editBlock(targetID, blockSpace[targetID].type, blockSpace[targetID].colors, blockSpace[targetID].sizes);
+        }
+    });
+
+    document.getElementById('create').addEventListener('click', () => {
+        createBlock(typeinput.value);
+    });
+
+    document.getElementById('remove').addEventListener('click', () => {
+        if (targetID) {
+            removeBlock(targetID);
+        }
+    });
+
+} else {
+    console.error("The <svg id='workspace'> element was not found.");
+}
