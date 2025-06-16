@@ -99,7 +99,7 @@ export function generate(shapeData, svgElement) {
     
     // Set a reasonable default size for the SVG element in the DOM.
     // This can be overridden by CSS.
-    const zoom = 10;
+    const zoom = 1;
     svgElement.style.width = `${viewBoxWidth * zoom}px`;
     svgElement.style.height = `${viewBoxHeight * zoom}px`;
 }
