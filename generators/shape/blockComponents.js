@@ -128,8 +128,8 @@ function notch(x = 0, y = 0, inverted = false) {
     } else {
         return [
             {x: 6+x, y: 0+y, cornerRadius: NOTCH_RADIUS},
-            {x: 5+x, y: -1+y, cornerRadius: NOTCH_RADIUS},
-            {x: 3+x, y: -1+y, cornerRadius: NOTCH_RADIUS},
+            {x: 5+x, y: 1+y, cornerRadius: NOTCH_RADIUS},
+            {x: 3+x, y: 1+y, cornerRadius: NOTCH_RADIUS},
             {x: 2+x, y: 0+y, cornerRadius: NOTCH_RADIUS}
         ];
     }
