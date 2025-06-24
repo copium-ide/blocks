@@ -4,7 +4,7 @@ import * as drag from './drag.js';
 
 // --- Configuration ---
 export const APP_SCALE = 8;
-const MIN_LOOP_HEIGHT = 0.5; // The height for an empty C-shaped loop branch.
+const MIN_LOOP_HEIGHT = 0.5;
 
 // --- DOM Element References ---
 function getElements() {
@@ -71,43 +71,36 @@ function generateShape(uuid, type, colors, sizes) {
 // --- Core Sizing & Layout Logic ---
 
 /**
- * Calculates the total vertical space a SINGLE block takes up.
- * For a C-shaped block, this includes the height of its arms and the loop area between them.
+ * FIX: Calculates a block's height based on its solid parts ONLY.
+ * It IGNORES the block's own internal loop area. This is essential for
+ * accurately calculating the required size of a PARENT loop.
  */
-function getBlockOccupiedHeight(blockId) {
+function getBlockVisualHeight(blockId) {
     const block = appState.blockSpace[blockId];
     if (!block) return 0;
-
     let height = 0;
     block.sizes.forEach(branch => {
-        height += branch.height;
-        if (branch.loop && branch.loop.height > 0) {
-            height += branch.loop.height;
-        }
+        height += branch.height; // Only sum the solid branch heights
     });
     return height;
 }
 
 /**
- * Calculates the total height of a full chain of blocks connected vertically.
- * This is used to measure the content INSIDE a loop.
+ * Calculates the total height of a full chain of blocks.
+ * FIX: This now uses getBlockVisualHeight to get an accurate sum.
  */
 function calculateChainHeight(startBlockId) {
     if (!startBlockId) return 0;
     let totalHeight = 0;
     let currentBlockId = startBlockId;
     while (currentBlockId) {
-        totalHeight += getBlockOccupiedHeight(currentBlockId);
+        totalHeight += getBlockVisualHeight(currentBlockId); // Use the corrected height function
         const currentBlock = appState.blockSpace[currentBlockId];
-        currentBlockId = currentBlock ? currentBlock.children['bottom'] : null;
+        currentBlockId = currentBlock?.children['bottom'];
     }
     return totalHeight;
 }
 
-/**
- * Recalculates the loop area height for a C-shaped block based on its contents.
- * This function implements the requested sizing rules.
- */
 function updateLoopBranchHeight(loopBlockId, previewContext = null) {
     const loopBlock = appState.blockSpace[loopBlockId];
     if (!loopBlock || !loopBlock.sizes?.some(s => s.loop)) {
@@ -127,7 +120,7 @@ function updateLoopBranchHeight(loopBlockId, previewContext = null) {
                 chainHeight += calculateChainHeight(previewContext.draggedBlockId);
             }
 
-            // RULE IMPLEMENTED: If loop is empty (height is 0), use min height. Otherwise, use content height.
+            // Correct Logic: If the chain has content, use its height. Otherwise, use the minimum.
             const newLoopHeight = chainHeight > 0 ? chainHeight : MIN_LOOP_HEIGHT;
 
             if (branch.loop.height !== newLoopHeight) {
@@ -142,13 +135,15 @@ function updateLoopBranchHeight(loopBlockId, previewContext = null) {
             generateShape(loopBlockId, loopBlock.type, loopBlock.colors, newSizes);
         } else {
             editBlock(loopBlockId, { sizes: newSizes });
+            // FIX: If the updated block is the one being edited, refresh its sliders
+            // to show the new "auto" loop height.
+            if (loopBlockId === appState.targetID) {
+                renderDimensionSliders();
+            }
         }
     }
 }
 
-/**
- * Traverses up the parent chain of a block, updating the loop sizes of any ancestors.
- */
 function notifyAncestorsOfChange(startBlockId) {
     let parentId = appState.blockSpace[startBlockId]?.parent;
     while (parentId) {
@@ -254,7 +249,7 @@ function renderDimensionSliders() {
             <label>Height: <input type="range" min="0.5" max="10" step="0.1" value="${branch.height}" data-index="${index}" data-prop="height" class="branch-input"></label>
             <label>Width: <input type="range" min="0.5" max="10" step="0.1" value="${branch.width}" data-index="${index}" data-prop="width" class="branch-input"></label>`;
         
-        if (branch.loop && isBranchBlock && sizes.length > 1 && index < sizes.length - 1) {
+        if (branch.loop) {
             branchDiv.innerHTML += `<label>Loop Height: ${branch.loop.height.toFixed(1)} (auto)</label>`;
         }
         dom.slidersContainer.appendChild(branchDiv);
