@@ -1,13 +1,12 @@
 import * as main from "./main.js";
 
 export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
-  const SNAP_RADIUS = 20;
+  const SNAP_RADIUS = 20; // In screen pixels
 
   let isDragging = false;
   let selectedElement = null;
   let offset = { x: 0, y: 0 };
 
-  // A group to hold all the snap point visualization circles.
   let snapPointVisualizerGroup = null;
 
   function getSVGCoordinates(event) {
@@ -23,24 +22,16 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
     return ctm ? pt.matrixTransform(ctm.inverse()) : { x: 0, y: 0 };
   }
 
-  /**
-   * Creates and displays visualization circles for all available snap points.
-   * This is called at the beginning of a drag.
-   */
   function createSnapVisualizers() {
-    if (snapPointVisualizerGroup) {
-        removeSnapVisualizers();
-    }
+    if (snapPointVisualizerGroup) removeSnapVisualizers();
     
-    // Create a group in the main SVG to hold all the circles
     snapPointVisualizerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     snapPointVisualizerGroup.setAttribute('id', 'snap-visualizers');
-    snapPointVisualizerGroup.style.pointerEvents = 'none'; // Make sure they don't interfere with mouse events
+    snapPointVisualizerGroup.style.pointerEvents = 'none';
     svgContainer.appendChild(snapPointVisualizerGroup);
 
-    const circleRadius = 5 / main.APP_SCALE; // Keep circle size consistent when zooming
+    const circleRadius = 5 / main.APP_SCALE;
 
-    // Iterate over every block to draw its snap points
     for (const blockId in allBlocks) {
       const blockData = allBlocks[blockId];
       if (!blockData.snapPoints || !blockData.transform) continue;
@@ -48,9 +39,9 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
       blockData.snapPoints.forEach((point, index) => {
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         
-        // Calculate the absolute position of the snap point
-        const cx = blockData.transform.x + point.x;
-        const cy = blockData.transform.y + point.y;
+        // **UPDATED**: Multiply the local snap point offset by APP_SCALE to get its true world offset.
+        const cx = blockData.transform.x + (point.x * main.APP_SCALE);
+        const cy = blockData.transform.y + (point.y * main.APP_SCALE);
         
         circle.setAttribute('cx', cx);
         circle.setAttribute('cy', cy);
@@ -58,18 +49,16 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
         circle.setAttribute('stroke', 'rgba(0,0,0,0.5)');
         circle.setAttribute('stroke-width', 1 / main.APP_SCALE);
         
-        // Store which block and point this circle corresponds to
         circle.dataset.blockId = blockId;
         circle.dataset.pointIndex = index;
 
-        // Color depends on the role (and if it's on the active block)
         const isSelectedBlock = blockId === selectedElement.id;
         if (point.role === 'male' && isSelectedBlock) {
-          circle.setAttribute('fill', 'rgba(255, 100, 100, 0.7)'); // Active male point (the "plug")
+          circle.setAttribute('fill', 'rgba(255, 100, 100, 0.7)');
         } else if (point.role === 'female') {
-          circle.setAttribute('fill', 'rgba(255, 255, 0, 0.7)'); // Yellow for female points (the "socket")
+          circle.setAttribute('fill', 'rgba(255, 255, 0, 0.7)');
         } else {
-          circle.setAttribute('fill', 'rgba(100, 100, 255, 0.5)'); // Inactive male point
+          circle.setAttribute('fill', 'rgba(100, 100, 255, 0.5)');
         }
 
         snapPointVisualizerGroup.appendChild(circle);
@@ -77,10 +66,6 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
     }
   }
 
-  /**
-   * Updates the position of the visualizer circles for the block currently being dragged.
-   * @param {{x: number, y: number}} newBlockPos The new top-left position of the dragged block.
-   */
   function updateActiveVisualizers(newBlockPos) {
     if (!snapPointVisualizerGroup || !selectedElement) return;
 
@@ -91,16 +76,13 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
       const pointIndex = parseInt(circle.dataset.pointIndex, 10);
       const point = blockData.snapPoints[pointIndex];
       if (point) {
-        circle.setAttribute('cx', newBlockPos.x + point.x);
-        circle.setAttribute('cy', newBlockPos.y + point.y);
+        // **UPDATED**: Also multiply here when updating the dragged block's visualizers.
+        circle.setAttribute('cx', newBlockPos.x + (point.x * main.APP_SCALE));
+        circle.setAttribute('cy', newBlockPos.y + (point.y * main.APP_SCALE));
       }
     });
   }
 
-  /**
-   * Removes all visualization circles from the SVG.
-   * This is called at the end of a drag.
-   */
   function removeSnapVisualizers() {
     if (snapPointVisualizerGroup) {
       snapPointVisualizerGroup.remove();
@@ -109,7 +91,9 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
   }
 
   function checkForSnap(draggedBlockId, currentPos) {
+    // This calculation remains the same: we convert a screen-space radius to a world-space radius.
     const effectiveSnapRadius = SNAP_RADIUS / main.APP_SCALE;
+
     const draggedBlockData = allBlocks[draggedBlockId];
     if (!draggedBlockData || !draggedBlockData.snapPoints) return null;
 
@@ -127,8 +111,10 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
       for (const malePoint of maleSnapPoints) {
         for (const femalePoint of femaleSnapPoints) {
           if (malePoint.type === femalePoint.type) {
-            const targetX = staticBlockData.transform.x + femalePoint.x - malePoint.x;
-            const targetY = staticBlockData.transform.y + femalePoint.y - malePoint.y;
+            // **UPDATED**: Calculate the target position by scaling the local snap point offsets.
+            const targetX = staticBlockData.transform.x + (femalePoint.x * main.APP_SCALE) - (malePoint.x * main.APP_SCALE);
+            const targetY = staticBlockData.transform.y + (femalePoint.y * main.APP_SCALE) - (malePoint.y * main.APP_SCALE);
+            
             const distance = Math.sqrt(Math.pow(currentPos.x - targetX, 2) + Math.pow(currentPos.y - targetY, 2));
 
             if (distance < effectiveSnapRadius && distance < closestSnap.distance) {
@@ -158,9 +144,7 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
       offset.x = startPoint.x - currentPos.x;
       offset.y = startPoint.y - currentPos.y;
 
-      // --- VISUALIZATION START ---
       createSnapVisualizers();
-      // --- VISUALIZATION END ---
 
       window.addEventListener('mousemove', drag);
       window.addEventListener('mouseup', endDrag);
@@ -183,17 +167,13 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
     selectedElement.setAttribute('x', finalPos.x);
     selectedElement.setAttribute('y', finalPos.y);
 
-    // --- VISUALIZATION START ---
     updateActiveVisualizers(finalPos);
-    // --- VISUALIZATION END ---
   }
 
   function endDrag() {
     if (!isDragging) return;
 
-    // --- VISUALIZATION START ---
     removeSnapVisualizers();
-    // --- VISUALIZATION END ---
 
     window.removeEventListener('mousemove', drag);
     window.removeEventListener('mouseup', endDrag);
@@ -219,10 +199,9 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
   svgContainer.addEventListener('mousedown', startDrag);
   svgContainer.addEventListener('touchstart', startDrag, { passive: false });
 
-  // Add a cleanup function to remove visualizers if the component is ever destroyed
   return function cleanup() {
     svgContainer.removeEventListener('mousedown', startDrag);
     svgContainer.removeEventListener('touchstart', startDrag);
-    removeSnapVisualizers(); // Ensure no artifacts are left
+    removeSnapVisualizers();
   };
 }
