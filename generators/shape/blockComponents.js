@@ -22,8 +22,7 @@ export function branch(colors, sizes, top, bottom) {
             finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: 0, type: 'block', role: 'female', name: 'top'});
         } else if (top === 'hat') {
             finalShape.points.push(
-                {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
-                ...hat(0, 0),
+                {x: 0, y: 0, cornerRadius: CORNER_RADIUS*4}
             );
         } else if (top === 'flat') {
             finalShape.points.push(
@@ -58,8 +57,7 @@ export function branch(colors, sizes, top, bottom) {
             finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: 0, type: 'block', role: 'female', name: 'top'});
         } else if (top === 'hat') {
             shape = [
-                {x: 0, y: 0 + offset, cornerRadius: CORNER_RADIUS},
-                ...hat(0, 0 + offset, true),
+                {x: 0, y: 0 + offset, cornerRadius: CORNER_RADIUS*4},
                 ...block(0, dWidth, dHeight),
                 ...loop(0 + offset+dHeight, bHeight),
             ];
