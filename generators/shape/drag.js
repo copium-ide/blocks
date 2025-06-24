@@ -1,7 +1,7 @@
 import * as main from "./main.js";
 
 export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
-  const SNAP_RADIUS = 20; // In screen pixels
+  const SNAP_RADIUS = 100; // In screen pixels
 
   let isDragging = false;
   let selectedElement = null;
