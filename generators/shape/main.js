@@ -124,15 +124,14 @@ function updateLoopBranchHeight(loopBlockId, previewContext = null) {
             }
         }
     }
-
-    if (needsRedraw) {
-        if (previewContext) {
-            generateShape(loopBlockId, loopBlock.type, loopBlock.colors, newSizes);
-        } else {
-            editBlock(loopBlockId, { sizes: newSizes });
-        }
+    if (previewContext) {
+        generateShape(loopBlockId, loopBlock.type, loopBlock.colors, newSizes);
+    } else {
+        editBlock(loopBlockId, { sizes: newSizes });
     }
 }
+
+
 
 function notifyAncestorsOfChange(startBlockId) {
     let parentId = appState.blockSpace[startBlockId]?.parent;
