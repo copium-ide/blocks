@@ -148,11 +148,11 @@ function updateLoopSize(loopBlockId, previewData = null) {
 }
 
 function notifyAncestorsOfChange(startBlockId) {
-    let currentBlock = blockSpace[startBlockId];
-    while (currentBlock && currentBlock.parent) {
-        const parentId = currentBlock.parent;
-        updateLoopSize(parentId);
-        currentBlock = blockSpace[parentId];
+    let currentBlockId = startBlockId;
+    while (currentBlockId) {
+        updateLoopSize(currentBlockId);
+        const currentBlock = blockSpace[currentBlockId];
+        currentBlockId = currentBlock ? currentBlock.parent : null;
     }
 }
 
@@ -291,10 +291,7 @@ function onSnapPreview(snapInfo, draggedBlockId) {
 
 function onSnapPreviewEnd(snapInfo) {
     if (snapInfo.parentId) {
-        const parentBlock = blockSpace[snapInfo.parentId];
-        if (parentBlock) {
-            generateShape(snapInfo.parentId, parentBlock.type, parentBlock.colors, parentBlock.sizes);
-        }
+        updateLoopSize(snapInfo.parentId, null);
     }
 }
 
