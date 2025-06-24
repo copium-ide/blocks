@@ -124,27 +124,38 @@ function updateLoopBranchHeight(loopBlockId, previewContext = null) {
             }
         }
     }
-    if (previewContext) {
-        generateShape(loopBlockId, loopBlock.type, loopBlock.colors, newSizes);
-    } else {
-        editBlock(loopBlockId, { sizes: newSizes });
+
+    if (needsRedraw) {
+        if (previewContext) {
+            generateShape(loopBlockId, loopBlock.type, loopBlock.colors, newSizes);
+        } else {
+            editBlock(loopBlockId, { sizes: newSizes });
+        }
     }
 }
 
-
-
+// FIXED: This function now starts with the changed block itself, then traverses up.
 function notifyAncestorsOfChange(startBlockId) {
-    let parentId = appState.blockSpace[startBlockId]?.parent;
-    while (parentId) {
-        const parentBlock = appState.blockSpace[parentId];
-        updateLoopBranchHeight(parentId);
-        updateLayout(parentId);
-        if (parentId === appState.targetID) {
+    let currentId = startBlockId;
+    while (currentId) {
+        const currentBlock = appState.blockSpace[currentId];
+        if (!currentBlock) break; // Safety check
+
+        // Recalculate loop height, which might change the block's own dimensions
+        updateLoopBranchHeight(currentId);
+        // Reposition any of this block's children based on its new dimensions
+        updateLayout(currentId);
+
+        // If this block is the one selected in the UI, refresh its sliders
+        if (currentId === appState.targetID) {
             renderDimensionSliders();
         }
-        parentId = parentBlock?.parent;
+
+        // Move up the hierarchy to the parent
+        currentId = currentBlock.parent;
     }
 }
+
 
 function setParent(childId, newParentId, parentSnapPointName) {
     const childBlock = appState.blockSpace[childId];
@@ -308,7 +319,8 @@ function removeBlock(uuid) {
     });
 
     if (oldParentId) {
-        notifyAncestorsOfChange({ parent: oldParentId });
+        // FIXED: Passed the ID directly instead of an object.
+        notifyAncestorsOfChange(oldParentId);
     }
 
     if (groupToRemove.includes(appState.targetID)) {
@@ -341,7 +353,8 @@ function handleDetach(childId) {
     const oldParentId = childBlock.parent;
     setParent(childId, null, null);
     if (oldParentId) {
-        notifyAncestorsOfChange({ parent: oldParentId });
+        // FIXED: Passed the ID directly instead of an object.
+        notifyAncestorsOfChange(oldParentId);
     }
 }
 
@@ -378,7 +391,8 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
         }
         
         if (snapInfo.parentId) {
-            notifyAncestorsOfChange({ parent: snapInfo.parentId });
+            // FIXED: Passed the ID directly instead of an object.
+            notifyAncestorsOfChange(snapInfo.parentId);
         }
     }
 }
