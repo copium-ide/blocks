@@ -1,11 +1,25 @@
 import * as main from "./main.js";
 
-export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
+// Helper function to get a block and all its descendants.
+function getDragGroup(blockId, allBlocks) {
+    let group = [blockId];
+    const block = allBlocks[blockId];
+    if (block && block.children.length > 0) {
+        for (const childId of block.children) {
+            // Recursively get children of children
+            group = group.concat(getDragGroup(childId, allBlocks));
+        }
+    }
+    return group;
+}
+
+export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
   const SNAP_RADIUS = 100; // In screen pixels
 
   let isDragging = false;
-  let selectedElement = null;
-  let offset = { x: 0, y: 0 };
+  let selectedElement = null; // The specific element the mouse is over
+  let dragGroup = []; // Array of {el, id, relativeOffset} for the whole group
+  let offset = { x: 0, y: 0 }; // Offset of mouse from the main dragged element's origin
 
   let snapPointVisualizerGroup = null;
 
@@ -32,7 +46,13 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
 
     const circleRadius = 5 / main.APP_SCALE;
 
+    // Prevent snapping to self or children
+    const dragGroupIds = dragGroup.map(item => item.id);
+
     for (const blockId in allBlocks) {
+      // Don't show snap points for any block in the group being dragged.
+      if (dragGroupIds.includes(blockId)) continue;
+
       const blockData = allBlocks[blockId];
       if (!blockData.snapPoints || !blockData.transform) continue;
 
@@ -50,27 +70,32 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
         
         circle.dataset.blockId = blockId;
         circle.dataset.pointIndex = index;
-
-        // **UPDATED**: New coloring logic to reflect female-to-male snapping.
-        const isSelectedBlock = blockId === selectedElement.id;
-        if (isSelectedBlock) {
-            // This is the block being dragged
-            if (point.role === 'female') {
-                circle.setAttribute('fill', 'rgba(255, 100, 100, 0.8)'); // Active "plug" is now the female point
-            } else {
-                circle.setAttribute('fill', 'rgba(100, 100, 255, 0.5)'); // Inactive socket on the dragged block
-            }
+        
+        // This logic is now simpler since we filter out the dragged group.
+        // We only show potential targets (male points on static blocks).
+        if (point.role === 'male') {
+            circle.setAttribute('fill', 'rgba(255, 255, 0, 0.8)');
         } else {
-            // This is a static block in the background
-            if (point.role === 'male') {
-                circle.setAttribute('fill', 'rgba(255, 255, 0, 0.8)'); // Target "socket" is now the male point
-            } else {
-                circle.setAttribute('fill', 'rgba(150, 150, 150, 0.5)'); // Inactive plug on a static block
-            }
+            circle.setAttribute('fill', 'rgba(150, 150, 150, 0.5)');
         }
 
         snapPointVisualizerGroup.appendChild(circle);
       });
+    }
+    // Also visualize the active "female" points on the block being dragged
+    const draggedBlockData = allBlocks[selectedElement.id];
+    if (draggedBlockData && draggedBlockData.snapPoints) {
+        draggedBlockData.snapPoints.forEach(point => {
+            if (point.role === 'female') {
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('r', circleRadius);
+                circle.setAttribute('stroke', 'rgba(0,0,0,0.5)');
+                circle.setAttribute('stroke-width', 1 / main.APP_SCALE);
+                circle.setAttribute('fill', 'rgba(255, 100, 100, 0.8)');
+                circle.dataset.blockId = selectedElement.id; // Mark as part of the active group
+                snapPointVisualizerGroup.appendChild(circle);
+            }
+        });
     }
   }
 
@@ -79,10 +104,12 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
 
     const activeCircles = snapPointVisualizerGroup.querySelectorAll(`[data-block-id="${selectedElement.id}"]`);
     const blockData = allBlocks[selectedElement.id];
+    if (!blockData.snapPoints) return;
 
-    activeCircles.forEach(circle => {
-      const pointIndex = parseInt(circle.dataset.pointIndex, 10);
-      const point = blockData.snapPoints[pointIndex];
+    const femalePoints = blockData.snapPoints.filter(p => p.role === 'female');
+
+    activeCircles.forEach((circle, index) => {
+      const point = femalePoints[index];
       if (point) {
         circle.setAttribute('cx', newBlockPos.x + (point.x * main.APP_SCALE));
         circle.setAttribute('cy', newBlockPos.y + (point.y * main.APP_SCALE));
@@ -97,41 +124,45 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
     }
   }
 
-  function checkForSnap(draggedBlockId, currentPos) {
+  function checkForSnap(draggedBlockId, currentPos, dragGroupIds) {
     const effectiveSnapRadius = SNAP_RADIUS / main.APP_SCALE;
     const draggedBlockData = allBlocks[draggedBlockId];
     if (!draggedBlockData || !draggedBlockData.snapPoints) return null;
 
-    // **UPDATED**: We now look for FEMALE points on the block being dragged.
     const femaleSnapPoints = draggedBlockData.snapPoints.filter(p => p.role === 'female');
     if (femaleSnapPoints.length === 0) return null;
 
-    let closestSnap = { distance: Infinity, position: null };
+    let closestSnap = { distance: Infinity, position: null, targetId: null };
 
     for (const blockId in allBlocks) {
-      if (blockId === draggedBlockId) continue;
+      // Prevent snapping to yourself or your own children
+      if (dragGroupIds.includes(blockId)) continue;
+
       const staticBlockData = allBlocks[blockId];
       if (!staticBlockData.snapPoints || !staticBlockData.transform) continue;
 
-      // **UPDATED**: And we look for MALE points on the static blocks to snap to.
       const maleSnapPoints = staticBlockData.snapPoints.filter(p => p.role === 'male');
+
       for (const femalePoint of femaleSnapPoints) {
         for (const malePoint of maleSnapPoints) {
           if (femalePoint.type === malePoint.type) {
-            // **UPDATED**: The calculation is reversed to align the female point to the male point.
             const targetX = staticBlockData.transform.x + (malePoint.x * main.APP_SCALE) - (femalePoint.x * main.APP_SCALE);
             const targetY = staticBlockData.transform.y + (malePoint.y * main.APP_SCALE) - (femalePoint.y * main.APP_SCALE);
             
             const distance = Math.sqrt(Math.pow(currentPos.x - targetX, 2) + Math.pow(currentPos.y - targetY, 2));
 
             if (distance < effectiveSnapRadius && distance < closestSnap.distance) {
-              closestSnap = { distance, position: { x: targetX, y: targetY } };
+              closestSnap = { 
+                distance, 
+                position: { x: targetX, y: targetY },
+                targetId: blockId // Keep track of what we snapped to
+              };
             }
           }
         }
       }
     }
-    return closestSnap.position;
+    return closestSnap.targetId ? closestSnap : null;
   }
 
   function startDrag(event) {
@@ -141,15 +172,35 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
     if (target && svgContainer.contains(target)) {
       isDragging = true;
       selectedElement = target;
-      selectedElement.classList.add('active');
       
-      svgContainer.appendChild(selectedElement);
+      const mainBlockStartPos = allBlocks[selectedElement.id]?.transform || { x: 0, y: 0 };
+
+      // **UPDATED**: Build the entire group of elements to be dragged.
+      const dragGroupIds = getDragGroup(selectedElement.id, allBlocks);
+      dragGroup = [];
+      dragGroupIds.forEach(id => {
+          const el = document.getElementById(id);
+          const blockData = allBlocks[id];
+          if (el && blockData?.transform) {
+              // Bring all elements in the group to the top for rendering
+              svgContainer.appendChild(el);
+              dragGroup.push({
+                  id: id,
+                  el: el,
+                  // Calculate offset relative to the main block being dragged
+                  relativeOffset: {
+                      x: blockData.transform.x - mainBlockStartPos.x,
+                      y: blockData.transform.y - mainBlockStartPos.y
+                  }
+              });
+          }
+      });
+      
+      selectedElement.classList.add('active');
 
       const startPoint = getSVGCoordinates(event);
-      const currentPos = allBlocks[selectedElement.id]?.transform || { x: 0, y: 0 };
-      
-      offset.x = startPoint.x - currentPos.x;
-      offset.y = startPoint.y - currentPos.y;
+      offset.x = startPoint.x - mainBlockStartPos.x;
+      offset.y = startPoint.y - mainBlockStartPos.y;
 
       createSnapVisualizers();
 
@@ -168,11 +219,20 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
     
     const coord = getSVGCoordinates(event);
     const mouseDrivenPos = { x: coord.x - offset.x, y: coord.y - offset.y };
-    const snappedPos = checkForSnap(selectedElement.id, mouseDrivenPos);
-    const finalPos = snappedPos || mouseDrivenPos;
     
-    selectedElement.setAttribute('x', finalPos.x);
-    selectedElement.setAttribute('y', finalPos.y);
+    const dragGroupIds = dragGroup.map(item => item.id);
+    const snapInfo = checkForSnap(selectedElement.id, mouseDrivenPos, dragGroupIds);
+    const finalPos = snapInfo ? snapInfo.position : mouseDrivenPos;
+    
+    // **UPDATED**: Move the entire group based on the main element's position.
+    dragGroup.forEach(item => {
+        const newPos = {
+            x: finalPos.x + item.relativeOffset.x,
+            y: finalPos.y + item.relativeOffset.y
+        };
+        item.el.setAttribute('x', newPos.x);
+        item.el.setAttribute('y', newPos.y);
+    });
 
     updateActiveVisualizers(finalPos);
   }
@@ -189,18 +249,26 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
     window.removeEventListener('blur', endDrag);
     
     if (selectedElement) {
-      if (onPositionUpdate) {
+      if (onDragEnd) {
         const finalTransform = {
             x: selectedElement.x.baseVal.value,
             y: selectedElement.y.baseVal.value
         };
-        onPositionUpdate(selectedElement.id, finalTransform);
+        
+        // **UPDATED**: Check for a snap one last time to get the target ID.
+        const dragGroupIds = dragGroup.map(item => item.id);
+        const snapInfo = checkForSnap(selectedElement.id, finalTransform, dragGroupIds);
+        const snapTargetId = snapInfo ? snapInfo.targetId : null;
+
+        // The new callback signature informs main.js of the final state.
+        onDragEnd(selectedElement.id, finalTransform, snapTargetId);
       }
       selectedElement.classList.remove('active');
     }
 
     isDragging = false;
     selectedElement = null;
+    dragGroup = []; // Clear the group
   }
 
   svgContainer.addEventListener('mousedown', startDrag);
