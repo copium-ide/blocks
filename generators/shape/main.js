@@ -4,10 +4,9 @@ import * as drag from './drag.js';
 
 // --- Configuration ---
 export const APP_SCALE = 8;
-const MIN_LOOP_HEIGHT = 0.5;
+const MIN_LOOP_HEIGHT = 0.5; // The height for an empty C-shaped loop branch.
 
 // --- DOM Element References ---
-// Encapsulate element fetching in a function to handle potential nulls gracefully.
 function getElements() {
     return {
         workSpace: document.getElementById('workspace'),
@@ -27,7 +26,6 @@ function getElements() {
 const dom = getElements();
 
 // --- Application State ---
-// Centralizing state makes data flow predictable and easier to debug.
 const appState = {
     blockSpace: {},
     targetID: null,
@@ -48,10 +46,6 @@ function setupWorkspaceViewBox() {
     dom.workSpace.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
 }
 
-/**
- * Recursively collects all block IDs in a chain, including the starting block.
- * FIX: Uses an accumulator array (`group`) for better performance than `concat`.
- */
 function getDragGroup(blockId, allBlocks, group = []) {
     group.push(blockId);
     const block = allBlocks[blockId];
@@ -73,7 +67,14 @@ function generateShape(uuid, type, colors, sizes) {
     }
 }
 
-function getBlockVisualHeight(blockId) {
+
+// --- Core Sizing & Layout Logic ---
+
+/**
+ * Calculates the total vertical space a SINGLE block takes up.
+ * For a C-shaped block, this includes the height of its arms and the loop area between them.
+ */
+function getBlockOccupiedHeight(blockId) {
     const block = appState.blockSpace[blockId];
     if (!block) return 0;
 
@@ -87,23 +88,80 @@ function getBlockVisualHeight(blockId) {
     return height;
 }
 
+/**
+ * Calculates the total height of a full chain of blocks connected vertically.
+ * This is used to measure the content INSIDE a loop.
+ */
 function calculateChainHeight(startBlockId) {
     if (!startBlockId) return 0;
     let totalHeight = 0;
     let currentBlockId = startBlockId;
     while (currentBlockId) {
-        totalHeight += getBlockVisualHeight(currentBlockId);
+        totalHeight += getBlockOccupiedHeight(currentBlockId);
         const currentBlock = appState.blockSpace[currentBlockId];
         currentBlockId = currentBlock ? currentBlock.children['bottom'] : null;
     }
     return totalHeight;
 }
 
+/**
+ * Recalculates the loop area height for a C-shaped block based on its contents.
+ * This function implements the requested sizing rules.
+ */
+function updateLoopBranchHeight(loopBlockId, previewContext = null) {
+    const loopBlock = appState.blockSpace[loopBlockId];
+    if (!loopBlock || !loopBlock.sizes?.some(s => s.loop)) {
+        return;
+    }
+
+    let needsRedraw = false;
+    const newSizes = loopBlock.sizes.map(s => ({ ...s, loop: s.loop ? { ...s.loop } : undefined }));
+
+    for (let i = 0; i < newSizes.length; i++) {
+        const branch = newSizes[i];
+        if (branch.loop) {
+            const innerChainStartId = loopBlock.children['topInner' + i];
+            let chainHeight = calculateChainHeight(innerChainStartId);
+
+            if (previewContext && previewContext.snapPointName === 'topInner' + i) {
+                chainHeight += calculateChainHeight(previewContext.draggedBlockId);
+            }
+
+            // RULE IMPLEMENTED: If loop is empty (height is 0), use min height. Otherwise, use content height.
+            const newLoopHeight = chainHeight > 0 ? chainHeight : MIN_LOOP_HEIGHT;
+
+            if (branch.loop.height !== newLoopHeight) {
+                branch.loop.height = newLoopHeight;
+                needsRedraw = true;
+            }
+        }
+    }
+
+    if (needsRedraw) {
+        if (previewContext) {
+            generateShape(loopBlockId, loopBlock.type, loopBlock.colors, newSizes);
+        } else {
+            editBlock(loopBlockId, { sizes: newSizes });
+        }
+    }
+}
+
+/**
+ * Traverses up the parent chain of a block, updating the loop sizes of any ancestors.
+ */
+function notifyAncestorsOfChange(startBlockId) {
+    let parentId = appState.blockSpace[startBlockId]?.parent;
+    while (parentId) {
+        const parentBlock = appState.blockSpace[parentId];
+        updateLoopBranchHeight(parentId);
+        parentId = parentBlock?.parent;
+    }
+}
+
 function setParent(childId, newParentId, parentSnapPointName) {
     const childBlock = appState.blockSpace[childId];
     if (!childBlock) return;
 
-    // 1. Detach from the old parent
     const oldParentId = childBlock.parent;
     if (oldParentId && appState.blockSpace[oldParentId]) {
         const oldParent = appState.blockSpace[oldParentId];
@@ -115,10 +173,7 @@ function setParent(childId, newParentId, parentSnapPointName) {
         }
     }
 
-    // 2. Set the new parent on the child
     childBlock.parent = newParentId;
-
-    // 3. Attach to the new parent
     if (newParentId && parentSnapPointName && appState.blockSpace[newParentId]) {
         appState.blockSpace[newParentId].children[parentSnapPointName] = childId;
     }
@@ -140,8 +195,7 @@ function updateLayout(startBlockId) {
         const newX = parentBlock.transform.x + (parentMalePoint.x * APP_SCALE) - (childFemalePoint.x * APP_SCALE);
         const newY = parentBlock.transform.y + (parentMalePoint.y * APP_SCALE) - (childFemalePoint.y * APP_SCALE);
         
-        // Move the child and all its descendants to the new snapped position
-        const groupToMove = getDragGroup(childId, appState.blockSpace);
+        const groupToMove = getDragGroup(childId, appState.blockSpace, []);
         const deltaX = newX - childBlock.transform.x;
         const deltaY = newY - childBlock.transform.y;
         
@@ -149,10 +203,8 @@ function updateLayout(startBlockId) {
             const blockToMove = appState.blockSpace[id];
             const blockElm = document.getElementById(id);
             if (blockToMove && blockElm) {
-                // Update data model
                 blockToMove.transform.x += deltaX;
                 blockToMove.transform.y += deltaY;
-                // Update view
                 blockElm.setAttribute('x', blockToMove.transform.x);
                 blockElm.setAttribute('y', blockToMove.transform.y);
             }
@@ -160,52 +212,6 @@ function updateLayout(startBlockId) {
     }
 }
 
-
-function updateLoopSize(loopBlockId, previewData = null) {
-    const loopBlock = appState.blockSpace[loopBlockId];
-    if (!loopBlock || !loopBlock.sizes) return;
-
-    let needsRedraw = false;
-    // FIX: Avoid expensive deep copy. Create a new sizes array and copy properties.
-    const newSizes = loopBlock.sizes.map(s => ({ ...s, loop: s.loop ? {...s.loop} : undefined }));
-
-    for (let i = 0; i < newSizes.length; i++) {
-        const branch = newSizes[i];
-        if (branch.loop) {
-            const innerChainStartId = loopBlock.children['topInner' + i];
-            let chainHeight = calculateChainHeight(innerChainStartId);
-
-            // If we are previewing a snap, add the height of the dragged block
-            if (previewData && previewData.snapPointName === 'topInner' + i) {
-                chainHeight += calculateChainHeight(previewData.draggedBlockId);
-            }
-
-            const newLoopHeight = chainHeight > 0 ? chainHeight : MIN_LOOP_HEIGHT;
-            if (branch.loop.height !== newLoopHeight) {
-                branch.loop.height = newLoopHeight;
-                needsRedraw = true;
-            }
-        }
-    }
-
-    if (needsRedraw) {
-        if (previewData) {
-            // For previews, just render the shape with temporary sizes
-            generateShape(loopBlockId, loopBlock.type, loopBlock.colors, newSizes);
-        } else {
-            // For final updates, commit the change to the state and re-render
-            editBlock(loopBlockId, { sizes: newSizes });
-        }
-    }
-}
-
-function notifyAncestorsOfChange(startBlockId) {
-    let currentBlockId = appState.blockSpace[startBlockId]?.parent;
-    while (currentBlockId) {
-        updateLoopSize(currentBlockId);
-        currentBlockId = appState.blockSpace[currentBlockId]?.parent;
-    }
-}
 
 // --- UI Update Functions ---
 
@@ -220,14 +226,9 @@ function populateSelector() {
         option.textContent = `${appState.blockSpace[key].type} (${key.substring(0, 8)})`;
         dom.uuidinput.appendChild(option);
     }
-    // Restore selection if possible, otherwise select the first item.
     dom.uuidinput.value = appState.blockSpace[currentVal] ? currentVal : (Object.keys(appState.blockSpace)[0] || '');
 }
 
-/**
- * Renders the dimension sliders for the currently targeted block.
- * FIX: This function ONLY renders the UI. It does NOT attach event listeners.
- */
 function renderDimensionSliders() {
     if (!dom.slidersContainer) return;
     clearNode(dom.slidersContainer);
@@ -262,18 +263,12 @@ function renderDimensionSliders() {
 
 // --- Core Application Logic / "Actions" ---
 
-/**
- * The single source of truth for modifying a block's properties.
- * Accepts a partial update object.
- */
 function editBlock(uuid, updates) {
     const block = appState.blockSpace[uuid];
     if (!block) return;
 
-    // Merge updates into the block's state
     Object.assign(block, updates);
     
-    // If sizes were updated, we must recalculate snap points.
     if (updates.sizes || updates.type) {
         block.snapPoints = blocks.Block(block.type, block.colors, block.sizes).snapPoints;
     }
@@ -285,23 +280,16 @@ function editBlock(uuid, updates) {
 
 function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
     let uuid;
-    // FIX: Use a while loop to prevent theoretical stack overflow on collision.
     do {
         uuid = crypto.randomUUID();
     } while (appState.blockSpace.hasOwnProperty(uuid));
     
-    const sizes = [{ height: 1, width: 1, loop: { height: 1 } }];
+    const sizes = [{ height: 1, width: 1, loop: { height: MIN_LOOP_HEIGHT } }];
     const blockData = blocks.Block(type, colors, sizes);
 
     const block = {
-        type: type,
-        uuid: uuid,
-        colors: colors,
-        sizes: sizes,
-        snapPoints: blockData.snapPoints,
-        transform: { x: 420, y: 50 },
-        parent: null,
-        children: {}
+        type: type, uuid: uuid, colors: colors, sizes: sizes, snapPoints: blockData.snapPoints,
+        transform: { x: 420, y: 50 }, parent: null, children: {}
     };
     appState.blockSpace[uuid] = block;
 
@@ -314,7 +302,6 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
 
     generateShape(uuid, type, colors, sizes);
     
-    // Update UI
     appState.targetID = uuid;
     populateSelector();
     renderDimensionSliders();
@@ -325,7 +312,7 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
 function removeBlock(uuid) {
     if (!appState.blockSpace[uuid]) return;
 
-    const groupToRemove = getDragGroup(uuid, appState.blockSpace);
+    const groupToRemove = getDragGroup(uuid, appState.blockSpace, []);
     handleDetach(uuid);
 
     groupToRemove.forEach(idToRemove => {
@@ -348,14 +335,14 @@ function removeBlock(uuid) {
 
 function onSnapPreview(snapInfo, draggedBlockId) {
     if (snapInfo.parentId) {
-        updateLoopSize(snapInfo.parentId, { draggedBlockId, snapPointName: snapInfo.parentSnapPoint.name });
+        const previewContext = { draggedBlockId, snapPointName: snapInfo.parentSnapPoint.name };
+        updateLoopBranchHeight(snapInfo.parentId, previewContext);
     }
 }
 
 function onSnapPreviewEnd(snapInfo) {
     if (snapInfo.parentId) {
-        // Redraw parent with its final, correct size
-        updateLoopSize(snapInfo.parentId);
+        updateLoopBranchHeight(snapInfo.parentId);
     }
 }
 
@@ -365,6 +352,7 @@ function handleDetach(childId) {
     const oldParentId = childBlock.parent;
     setParent(childId, null, null);
     if (oldParentId) {
+        updateLoopBranchHeight(oldParentId);
         notifyAncestorsOfChange(oldParentId);
     }
 }
@@ -373,30 +361,28 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
     const mainDraggedBlock = appState.blockSpace[draggedBlockId];
     if (!mainDraggedBlock) return;
 
-    // FIX: The logic is now split. Handle free-drags and snaps separately to avoid double-transforms.
     if (snapInfo) {
-        // A snap occurred. `updateLayout` will handle positioning.
         if (snapInfo.snapType === 'insertion') {
             const { parentId, originalChildId, parentSnapPoint } = snapInfo;
             const draggedBlockBottomPoint = mainDraggedBlock.snapPoints.find(p => p.role === 'male' && p.name === 'bottom');
             if (draggedBlockBottomPoint) {
                 setParent(originalChildId, draggedBlockId, draggedBlockBottomPoint.name);
                 setParent(draggedBlockId, parentId, parentSnapPoint.name);
-                updateLayout(draggedBlockId); // Update layout for the new child
+                updateLayout(draggedBlockId);
             }
         } else if (snapInfo.snapType === 'append') {
             setParent(draggedBlockId, snapInfo.parentId, snapInfo.parentSnapPoint.name);
         }
 
         if (snapInfo.parentId) {
-            updateLayout(snapInfo.parentId); // This correctly positions the snapped block
+            updateLoopBranchHeight(snapInfo.parentId);
             notifyAncestorsOfChange(snapInfo.parentId);
+            updateLayout(snapInfo.parentId);
         }
     } else {
-        // No snap, just a free drag. Update the position of the dragged group based on the delta.
         const startPos = mainDraggedBlock.transform;
         const delta = { x: finalTransform.x - startPos.x, y: finalTransform.y - startPos.y };
-        const groupToMove = getDragGroup(draggedBlockId, appState.blockSpace);
+        const groupToMove = getDragGroup(draggedBlockId, appState.blockSpace, []);
 
         groupToMove.forEach(id => {
             const blockToMove = appState.blockSpace[id];
@@ -416,59 +402,48 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
 function setupEventListeners() {
     window.addEventListener('resize', setupWorkspaceViewBox);
 
-    // FIX: Use event delegation for sliders to avoid memory leaks.
     if (dom.slidersContainer) {
         dom.slidersContainer.addEventListener('input', (event) => {
-            if (!event.target.matches('.branch-input')) return;
-            if (!appState.targetID) return;
-
+            if (!event.target.matches('.branch-input') || !appState.targetID) return;
             const block = appState.blockSpace[appState.targetID];
             const idx = parseInt(event.target.getAttribute("data-index"));
             const prop = event.target.getAttribute("data-prop");
             const value = parseFloat(event.target.value);
-
-            // Create a new sizes array to avoid direct mutation before calling editBlock
             const newSizes = block.sizes.map(s => ({...s}));
             newSizes[idx][prop] = value;
-            
             editBlock(appState.targetID, { sizes: newSizes });
         });
 
         dom.slidersContainer.addEventListener('click', (event) => {
-            if (!event.target.matches('.remove-branch')) return;
-            if (!appState.targetID) return;
-            
+            if (!event.target.matches('.remove-branch') || !appState.targetID) return;
             const idx = parseInt(event.target.getAttribute("data-index"));
             const block = appState.blockSpace[appState.targetID];
             if (block.sizes.length > 1) {
                 const newSizes = block.sizes.filter((_, index) => index !== idx);
                 editBlock(appState.targetID, { sizes: newSizes });
-                renderDimensionSliders(); // Re-render sliders after removing one
+                renderDimensionSliders();
             }
         });
     }
     
-    // Consolidate other listeners
     const controls = [dom.color1input, dom.color2input, dom.typeinput, dom.hinput, dom.winput];
     controls.forEach(input => {
-        if (!input) return; // Robustness check
+        if (!input) return;
         const eventType = input.matches('select') ? 'change' : 'input';
         input.addEventListener(eventType, () => {
             if (!appState.targetID) return;
             const block = appState.blockSpace[appState.targetID];
             const updates = {};
-            if (input === dom.typeinput) {
-                updates.type = dom.typeinput.value;
-            } else if (input === dom.color1input || input === dom.color2input) {
-                updates.colors = { inner: dom.color1input.value, outer: dom.color2input.value };
-            } else if (input === dom.hinput || input === dom.winput) {
+            if (input === dom.typeinput) updates.type = dom.typeinput.value;
+            else if (input === dom.color1input || input === dom.color2input) updates.colors = { inner: dom.color1input.value, outer: dom.color2input.value };
+            else if (input === dom.hinput || input === dom.winput) {
                 const newSizes = block.sizes.map(s => ({...s}));
                 newSizes[0].height = parseFloat(dom.hinput.value);
                 newSizes[0].width = parseFloat(dom.winput.value);
                 updates.sizes = newSizes;
             }
             editBlock(appState.targetID, updates);
-            if(updates.type) renderDimensionSliders(); // Type change requires slider re-render
+            if(updates.type || updates.sizes) renderDimensionSliders();
         });
     });
 
@@ -491,7 +466,7 @@ function setupEventListeners() {
         dom.addBranchBtn.addEventListener('click', () => {
             if (!appState.targetID) return;
             const block = appState.blockSpace[appState.targetID];
-            const newSizes = [...block.sizes, { height: 1, width: 1, loop: { height: 1 } }];
+            const newSizes = [...block.sizes, { height: 1, width: 1, loop: { height: MIN_LOOP_HEIGHT } }];
             editBlock(appState.targetID, { sizes: newSizes });
             renderDimensionSliders();
         });
@@ -514,7 +489,6 @@ function main() {
     
     drag.makeDraggable(dom.workSpace, appState.blockSpace, onDragEnd, handleDetach, onSnapPreview, onSnapPreviewEnd);
 
-    // Initial block
     createBlock("hat");
 }
 
