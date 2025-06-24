@@ -134,24 +134,18 @@ function updateLoopBranchHeight(loopBlockId, previewContext = null) {
     }
 }
 
-// FIXED: This function now starts with the changed block itself, then traverses up.
 function notifyAncestorsOfChange(startBlockId) {
     let currentId = startBlockId;
     while (currentId) {
         const currentBlock = appState.blockSpace[currentId];
         if (!currentBlock) break; // Safety check
 
-        // Recalculate loop height, which might change the block's own dimensions
         updateLoopBranchHeight(currentId);
-        // Reposition any of this block's children based on its new dimensions
         updateLayout(currentId);
 
-        // If this block is the one selected in the UI, refresh its sliders
         if (currentId === appState.targetID) {
             renderDimensionSliders();
         }
-
-        // Move up the hierarchy to the parent
         currentId = currentBlock.parent;
     }
 }
@@ -319,7 +313,6 @@ function removeBlock(uuid) {
     });
 
     if (oldParentId) {
-        // FIXED: Passed the ID directly instead of an object.
         notifyAncestorsOfChange(oldParentId);
     }
 
@@ -343,6 +336,8 @@ function onSnapPreview(snapInfo, draggedBlockId) {
 
 function onSnapPreviewEnd(snapInfo) {
     if (snapInfo.parentId) {
+        // This will now be called whenever a snap preview ends,
+        // correctly recalculating the parent's height based on its actual children.
         updateLoopBranchHeight(snapInfo.parentId);
     }
 }
@@ -353,7 +348,6 @@ function handleDetach(childId) {
     const oldParentId = childBlock.parent;
     setParent(childId, null, null);
     if (oldParentId) {
-        // FIXED: Passed the ID directly instead of an object.
         notifyAncestorsOfChange(oldParentId);
     }
 }
@@ -391,7 +385,6 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
         }
         
         if (snapInfo.parentId) {
-            // FIXED: Passed the ID directly instead of an object.
             notifyAncestorsOfChange(snapInfo.parentId);
         }
     }
