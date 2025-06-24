@@ -1,4 +1,4 @@
-import APP_SCALE from "./main";
+import APP_SCALE from "./main.js";
 export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
   const SNAP_RADIUS = 20;
 
