@@ -90,9 +90,9 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
     if (event.cancelable) event.preventDefault();
     
     const coord = getSVGCoordinates(event);
-    const mouseDrivenPos = { x: coord.x - offset.x*main.APP_SCALE, y: coord.y - offset.y*main.APP_SCALE };
+    const mouseDrivenPos = { x: coord.x - offset.x, y: coord.y - offset.y };
 
-    const snappedPos = checkForSnap(selectedElement.id, mouseDrivenPos);
+    const snappedPos = checkForSnap(selectedElement.id, {x: mouseDrivenPos.x*main.APP_SCALE, y: mouseDrivenPos.y*main.APP_SCALE});
     const finalPos = snappedPos || mouseDrivenPos;
     
     // Update position using SVG attributes for better performance.
