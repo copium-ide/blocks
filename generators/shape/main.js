@@ -124,16 +124,30 @@ function updateLoopBranchHeight(loopBlockId, previewContext = null) {
         if (previewContext) {
             generateShape(loopBlockId, loopBlock.type, loopBlock.colors, newSizes);
         } else {
+            // Use editBlock to apply the changes, which handles the redraw.
             editBlock(loopBlockId, { sizes: newSizes });
         }
     }
 }
 
+/**
+ * FIX: This function now ensures a FULL refresh (visual shape AND UI controls)
+ * for all ancestors of a modified block.
+ */
 function notifyAncestorsOfChange(startBlockId) {
     let parentId = appState.blockSpace[startBlockId]?.parent;
     while (parentId) {
         const parentBlock = appState.blockSpace[parentId];
+
+        // 1. Recalculate and redraw the ancestor's SVG shape.
         updateLoopBranchHeight(parentId);
+
+        // 2. If this ancestor is the currently selected block, refresh its UI controls.
+        if (parentId === appState.targetID) {
+            renderDimensionSliders();
+        }
+        
+        // 3. Move up to the next ancestor.
         parentId = parentBlock?.parent;
     }
 }
@@ -323,28 +337,13 @@ function onSnapPreviewEnd(snapInfo) {
     }
 }
 
-/**
- * FIX: This function is now the single source of truth for ensuring
- * a parent block is fully updated after one of its children is detached.
- */
 function handleDetach(childId) {
     const childBlock = appState.blockSpace[childId];
     if (!childBlock) return;
-
     const oldParentId = childBlock.parent;
     setParent(childId, null, null);
-
     if (oldParentId) {
-        // Recalculate the parent's loop size, which triggers a redraw of its SVG shape.
-        updateLoopBranchHeight(oldParentId);
-        // Propagate changes further up the chain.
         notifyAncestorsOfChange(oldParentId);
-
-        // FIX: If the parent that just lost a child is the one currently being
-        // edited, we must also refresh its UI controls to show the new (auto) loop height.
-        if (oldParentId === appState.targetID) {
-            renderDimensionSliders();
-        }
     }
 }
 
@@ -366,7 +365,6 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
         }
 
         if (snapInfo.parentId) {
-            updateLoopBranchHeight(snapInfo.parentId);
             notifyAncestorsOfChange(snapInfo.parentId);
             updateLayout(snapInfo.parentId);
         }
