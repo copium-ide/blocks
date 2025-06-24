@@ -56,19 +56,33 @@ function clearSliders() {
     if (slidersContainer) slidersContainer.innerHTML = '';
 }
 
+/**
+ * **FIXED**: Calculates the total height of a connected chain of blocks.
+ * @param {string} startBlockId The ID of the first block in the chain.
+ * @returns {number} The total height of the chain.
+ */
 function calculateChainHeight(startBlockId) {
     if (!startBlockId || !blockSpace[startBlockId]) return 0;
+
     let totalHeight = 0;
     let currentBlockId = startBlockId;
+
     while (currentBlockId) {
         const currentBlock = blockSpace[currentBlockId];
         if (!currentBlock) break;
+
         currentBlock.sizes.forEach(size => {
             totalHeight += size.height;
-            if (size.loop && size.loop.height > 0) {
+
+            // THE FIX: A block is only a "loop" if it has multiple branches.
+            // Only add the loop gap height for actual C-shaped loop blocks.
+            const isLoopBlock = currentBlock.sizes.length > 1;
+
+            if (isLoopBlock && size.loop && size.loop.height > 0) {
                 totalHeight += size.loop.height;
             }
         });
+
         currentBlockId = currentBlock.children['bottom'];
     }
     return totalHeight;
@@ -77,7 +91,6 @@ function calculateChainHeight(startBlockId) {
 
 // ================================================================================= //
 // SECTION 3: CORE LOGIC (State, Layout, Parenting)
-// These functions are called by the main actions and handlers.
 // ================================================================================= //
 
 function setParent(childId, newParentId, parentSnapPointName) {
@@ -146,7 +159,6 @@ function updateLoopSize(loopBlockId) {
         }
     }
     if (needsRedraw) {
-        // Must call editBlock, which is defined later in the script
         editBlock(loopBlockId, loopBlock.type, loopBlock.colors, loopBlock.sizes);
     }
 }
@@ -163,7 +175,6 @@ function notifyAncestorsOfChange(startBlockId) {
 
 // ================================================================================= //
 // SECTION 4: UI MANAGEMENT AND BLOCK CRUD (Create, Remove, Update, Display)
-// These functions orchestrate the core logic and visual updates.
 // ================================================================================= //
 
 function populateSelector(obj) {
@@ -178,10 +189,6 @@ function populateSelector(obj) {
     uuidinput.value = obj[currentVal] ? currentVal : (Object.keys(obj)[0] || '');
 }
 
-/**
- * The main "update" function. It changes a block's data and triggers all
- * necessary visual refreshes for itself and related blocks.
- */
 function editBlock(uuid, type, colors, sizes) {
     if (!blockSpace[uuid]) return;
     const block = blockSpace[uuid];
@@ -229,7 +236,6 @@ function updateDimensionSliders() {
         slidersContainer.appendChild(branchDiv);
     });
 
-    // Event listeners are attached here, after the elements are created.
     document.querySelectorAll(".branch-input").forEach(input => {
         input.addEventListener("input", () => {
             if (!targetID || !blockSpace[targetID]) return;
