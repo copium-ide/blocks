@@ -44,22 +44,27 @@ function clearSliders() {
     if (slidersContainer) slidersContainer.innerHTML = '';
 }
 
+function getBlockFootprint(blockId) {
+    const block = blockSpace[blockId];
+    if (!block) return 0;
+    let footprint = 0;
+    block.sizes.forEach(branch => {
+        footprint += branch.height;
+        if (branch.loop && branch.loop.height > 0) {
+            footprint += branch.loop.height;
+        }
+    });
+    return footprint;
+}
+
 function calculateChainHeight(startBlockId) {
-    if (!startBlockId || !blockSpace[startBlockId]) return 0;
+    if (!startBlockId) return 0;
     let totalHeight = 0;
     let currentBlockId = startBlockId;
     while (currentBlockId) {
+        totalHeight += getBlockFootprint(currentBlockId);
         const currentBlock = blockSpace[currentBlockId];
-        if (!currentBlock) break;
-        let blockFootprint = 0;
-        currentBlock.sizes.forEach(branch => {
-            blockFootprint += branch.height;
-            if (branch.loop && branch.loop.height > 0) {
-                 blockFootprint += branch.loop.height;
-            }
-        });
-        totalHeight += blockFootprint;
-        currentBlockId = currentBlock.children['bottom'];
+        currentBlockId = currentBlock ? currentBlock.children['bottom'] : null;
     }
     return totalHeight;
 }
