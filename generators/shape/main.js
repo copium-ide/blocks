@@ -207,7 +207,7 @@ function handleDetach(childId) {
 }
 
 /**
- * Callback for when a drag operation ends.
+ * **UPDATED**: Callback for when a drag operation ends.
  */
 function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
     const mainDraggedBlock = blockSpace[draggedBlockId];
@@ -228,7 +228,13 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
         }
     });
 
-    updateLoopSize(newParentId);
+    if (newParentId) {
+        updateLoopSize(newParentId);
+        // **FIX**: After snapping and potentially resizing the parent, we must
+        // explicitly recalculate the layout for all of the parent's children.
+        // This ensures the new child snaps to the perfect final position.
+        updateLayout(newParentId);
+    }
 }
 
 /**
