@@ -2,19 +2,11 @@ import * as blocks from './blocks.js';
 import * as svg from './svg.js';
 import * as drag from './drag.js';
 
-// ================================================================================= //
-// SECTION 1: CONFIGURATION AND GLOBAL STATE
-// ================================================================================= //
-
 export const APP_SCALE = 8;
-// **FIX 1**: Changed the minimum loop height to 0.5.
 const MIN_LOOP_HEIGHT = 0.5;
-
 const workSpace = document.getElementById('workspace');
 const blockSpace = {};
 let targetID = null;
-
-// --- DOM ELEMENT REFERENCES ---
 const hinput = document.getElementById("h");
 const winput = document.getElementById("w");
 const typeinput = document.getElementById("type");
@@ -22,11 +14,6 @@ const uuidinput = document.getElementById("blockType");
 const color1input = document.getElementById("color1");
 const color2input = document.getElementById("color2");
 const slidersContainer = document.getElementById("sliders");
-
-
-// ================================================================================= //
-// SECTION 2: LOW-LEVEL UTILITY FUNCTIONS (No Dependencies)
-// ================================================================================= //
 
 function setupWorkspaceViewBox() {
     if (!workSpace) return;
@@ -76,11 +63,6 @@ function calculateChainHeight(startBlockId) {
     return totalHeight;
 }
 
-
-// ================================================================================= //
-// SECTION 3: CORE LOGIC (State, Layout, Parenting)
-// ================================================================================= //
-
 function setParent(childId, newParentId, parentSnapPointName) {
     const childBlock = blockSpace[childId];
     if (!childBlock) return;
@@ -129,16 +111,20 @@ function updateLayout(parentId) {
     }
 }
 
-function updateLoopSize(loopBlockId) {
+function updateLoopSize(loopBlockId, previewData = null) {
     if (!loopBlockId) return;
     const loopBlock = blockSpace[loopBlockId];
     if (!loopBlock || !loopBlock.sizes) return;
     let needsRedraw = false;
-    for (let i = 0; i < loopBlock.sizes.length; i++) {
-        const branch = loopBlock.sizes[i];
+    const tempSizes = JSON.parse(JSON.stringify(loopBlock.sizes));
+    for (let i = 0; i < tempSizes.length; i++) {
+        const branch = tempSizes[i];
         if (branch.loop) {
             const innerChainStartId = loopBlock.children['topInner' + i];
-            const chainHeight = calculateChainHeight(innerChainStartId);
+            let chainHeight = calculateChainHeight(innerChainStartId);
+            if (previewData && previewData.snapPointName === 'topInner' + i) {
+                chainHeight += calculateChainHeight(previewData.draggedBlockId);
+            }
             const newLoopHeight = chainHeight > 0 ? chainHeight : MIN_LOOP_HEIGHT;
             if (branch.loop.height !== newLoopHeight) {
                 branch.loop.height = newLoopHeight;
@@ -147,7 +133,11 @@ function updateLoopSize(loopBlockId) {
         }
     }
     if (needsRedraw) {
-        editBlock(loopBlockId, loopBlock.type, loopBlock.colors, loopBlock.sizes);
+        if (previewData) {
+            generateShape(loopBlockId, loopBlock.type, loopBlock.colors, tempSizes);
+        } else {
+            editBlock(loopBlockId, loopBlock.type, loopBlock.colors, loopBlock.sizes);
+        }
     }
 }
 
@@ -159,11 +149,6 @@ function notifyAncestorsOfChange(startBlockId) {
         currentBlock = blockSpace[parentId];
     }
 }
-
-
-// ================================================================================= //
-// SECTION 4: UI MANAGEMENT AND BLOCK CRUD (Create, Remove, Update, Display)
-// ================================================================================= //
 
 function populateSelector(obj) {
     const currentVal = uuidinput.value;
@@ -198,15 +183,12 @@ function updateDimensionSliders() {
     const mainSliders = document.getElementById('main-sliders');
     const addBranchBtn = document.getElementById('addBranch');
     const isBranchBlock = ['block', 'hat', 'end'].includes(type);
-
     if (mainSliders) mainSliders.style.display = isBranchBlock ? 'block' : 'none';
     if (addBranchBtn) addBranchBtn.style.display = isBranchBlock ? 'block' : 'none';
-
     if (isBranchBlock && currentBlock.sizes[0]) {
         hinput.value = currentBlock.sizes[0].height;
         winput.value = currentBlock.sizes[0].width;
     }
-
     currentBlock.sizes.forEach((branch, index) => {
         const branchDiv = document.createElement("div");
         branchDiv.className = "branch-slider";
@@ -217,13 +199,11 @@ function updateDimensionSliders() {
         branchDiv.innerHTML = headerHTML + `
             <label>Height: <input type="range" min="0.5" max="10" step="0.1" value="${branch.height}" data-index="${index}" data-prop="height" class="branch-input"></label>
             <label>Width: <input type="range" min="0.5" max="10" step="0.1" value="${branch.width}" data-index="${index}" data-prop="width" class="branch-input"></label>`;
-        
         if (isBranchBlock && currentBlock.sizes.length > 1 && index < currentBlock.sizes.length - 1) {
             branchDiv.innerHTML += `<label>Loop Height: ${branch.loop.height.toFixed(1)} (auto)</label>`;
         }
         slidersContainer.appendChild(branchDiv);
     });
-
     document.querySelectorAll(".branch-input").forEach(input => {
         input.addEventListener("input", () => {
             if (!targetID || !blockSpace[targetID]) return;
@@ -239,7 +219,6 @@ function updateDimensionSliders() {
             editBlock(targetID, block.type, block.colors, block.sizes);
         });
     });
-
     document.querySelectorAll(".remove-branch").forEach(button => {
         button.addEventListener("click", () => {
             const idx = parseInt(button.getAttribute("data-index"));
@@ -297,10 +276,21 @@ function removeBlock(uuid) {
     populateSelector(blockSpace);
 }
 
+function onSnapPreview(snapInfo, draggedBlockId) {
+    if (snapInfo.parentId) {
+        const previewData = { draggedBlockId, snapPointName: snapInfo.parentSnapPoint.name };
+        updateLoopSize(snapInfo.parentId, previewData);
+    }
+}
 
-// ================================================================================= //
-// SECTION 5: DRAG & DROP EVENT HANDLERS
-// ================================================================================= //
+function onSnapPreviewEnd(snapInfo) {
+    if (snapInfo.parentId) {
+        const parentBlock = blockSpace[snapInfo.parentId];
+        if (parentBlock) {
+            generateShape(snapInfo.parentId, parentBlock.type, parentBlock.colors, parentBlock.sizes);
+        }
+    }
+}
 
 function handleDetach(childId) {
     const childBlock = blockSpace[childId];
@@ -315,17 +305,12 @@ function handleDetach(childId) {
 function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
     const mainDraggedBlock = blockSpace[draggedBlockId];
     if (!mainDraggedBlock) return;
-
-    // Update the data model position of the dragged block(s)
     const startPos = mainDraggedBlock.transform;
     const delta = { x: finalTransform.x - startPos.x, y: finalTransform.y - startPos.y };
     getDragGroup(draggedBlockId, blockSpace).forEach(id => {
         if (blockSpace[id]) blockSpace[id].transform = { x: blockSpace[id].transform.x + delta.x, y: blockSpace[id].transform.y + delta.y };
     });
-
-    if (!snapInfo) return; // No snap, leave block floating
-
-    // Handle the parenting logic based on snap type
+    if (!snapInfo) return;
     if (snapInfo.snapType === 'insertion') {
         const { parentId, originalChildId, parentSnapPoint } = snapInfo;
         const draggedBlockBottomPoint = mainDraggedBlock.snapPoints.find(p => p.role === 'male' && p.name === 'bottom');
@@ -337,66 +322,49 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
     } else if (snapInfo.snapType === 'append') {
         setParent(draggedBlockId, snapInfo.parentId, snapInfo.parentSnapPoint.name);
     }
-
-    // Trigger layout and size updates
     if (snapInfo.parentId) {
         notifyAncestorsOfChange(snapInfo.parentId);
         updateLayout(snapInfo.parentId);
     }
-    
-    // **FIX 2**: If it was an insertion, the newly inserted block must now
-    // update the layout of its *new* child (the one that was pushed down).
     if (snapInfo.snapType === 'insertion') {
         updateLayout(draggedBlockId);
     }
 }
 
-
-// ================================================================================= //
-// SECTION 6: INITIALIZATION & GLOBAL EVENT LISTENERS
-// ================================================================================= //
-
 if (workSpace) {
     setupWorkspaceViewBox();
     window.addEventListener('resize', setupWorkspaceViewBox);
-
-    drag.makeDraggable(workSpace, blockSpace, onDragEnd, handleDetach);
+    drag.makeDraggable(workSpace, blockSpace, onDragEnd, handleDetach, onSnapPreview, onSnapPreviewEnd);
     createBlock("hat");
-
-    // --- Control Panel Event Listeners ---
     color1input.addEventListener("input", () => {
         if (targetID) editBlock(targetID, blockSpace[targetID].type, { inner: color1input.value, outer: color2input.value }, blockSpace[targetID].sizes);
     });
     color2input.addEventListener("input", () => {
         if (targetID) editBlock(targetID, blockSpace[targetID].type, { inner: color1input.value, outer: color2input.value }, blockSpace[targetID].sizes);
     });
-    
     typeinput.addEventListener("change", () => {
         if (targetID) editBlock(targetID, typeinput.value, blockSpace[targetID].colors, blockSpace[targetID].sizes);
         updateDimensionSliders();
     });
-
     uuidinput.addEventListener("change", () => {
         targetID = uuidinput.value;
         if (targetID) typeinput.value = blockSpace[targetID].type;
         updateDimensionSliders();
     });
-
     hinput.addEventListener("input", () => {
-        if(targetID) {
+        if (targetID) {
             const block = blockSpace[targetID];
             block.sizes[0].height = parseFloat(hinput.value);
             editBlock(targetID, block.type, block.colors, block.sizes);
         }
     });
     winput.addEventListener("input", () => {
-        if(targetID) {
+        if (targetID) {
             const block = blockSpace[targetID];
             block.sizes[0].width = parseFloat(winput.value);
             editBlock(targetID, block.type, block.colors, block.sizes);
         }
     });
-
     document.getElementById('addBranch').addEventListener('click', () => {
         if (targetID) {
             blockSpace[targetID].sizes.push({ height: 1, width: 1, loop: { height: 1 } });
@@ -404,10 +372,8 @@ if (workSpace) {
             updateDimensionSliders();
         }
     });
-
     document.getElementById('create').addEventListener('click', () => createBlock(typeinput.value));
     document.getElementById('remove').addEventListener('click', () => { if (targetID) removeBlock(targetID); });
-
 } else {
     console.error("The <svg id='workspace'> element was not found.");
 }
