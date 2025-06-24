@@ -18,9 +18,8 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
     let dragGroup = [];
     let offset = { x: 0, y: 0 };
     let snapPointVisualizerGroup = null;
-
     let currentSnapTarget = null;
-    let displacedBlockInfo = null;
+    let displacedChainInfo = null;
 
     function getSVGCoordinates(event) {
         const pt = svgContainer.createSVGPoint();
@@ -40,15 +39,19 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         if (onSnapPreviewEnd) {
             onSnapPreviewEnd(currentSnapTarget);
         }
-        if (displacedBlockInfo) {
-            const displacedEl = document.getElementById(displacedBlockInfo.id);
-            if (displacedEl) {
-                displacedEl.setAttribute('x', displacedBlockInfo.originalTransform.x);
-                displacedEl.setAttribute('y', displacedBlockInfo.originalTransform.y);
-            }
+        if (displacedChainInfo) {
+            const groupToRevert = getDragGroup(displacedChainInfo.id, allBlocks);
+            groupToRevert.forEach(blockId => {
+                const blockEl = document.getElementById(blockId);
+                const originalTransform = allBlocks[blockId].transform;
+                if (blockEl) {
+                    blockEl.setAttribute('x', originalTransform.x);
+                    blockEl.setAttribute('y', originalTransform.y);
+                }
+            });
         }
         currentSnapTarget = null;
-        displacedBlockInfo = null;
+        displacedChainInfo = null;
     }
 
     function handleSnapEnter(newSnapInfo) {
@@ -59,21 +62,26 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         }
         if (newSnapInfo.snapType === 'insertion' && newSnapInfo.originalChildId) {
             const displacedBlock = allBlocks[newSnapInfo.originalChildId];
-            const displacedEl = document.getElementById(newSnapInfo.originalChildId);
             const draggedBlock = allBlocks[selectedElement.id];
-            if (displacedBlock && displacedEl && draggedBlock) {
-                displacedBlockInfo = {
-                    id: newSnapInfo.originalChildId,
-                    originalTransform: { ...displacedBlock.transform }
-                };
+            if (displacedBlock && draggedBlock) {
+                displacedChainInfo = { id: newSnapInfo.originalChildId };
                 const draggedBottomPoint = draggedBlock.snapPoints.find(p => p.role === 'male' && p.name === 'bottom');
                 const displacedTopPoint = displacedBlock.snapPoints.find(p => p.role === 'female');
-                if(draggedBottomPoint && displacedTopPoint) {
+                if (draggedBottomPoint && displacedTopPoint) {
                     const snappedDraggedPos = newSnapInfo.position;
                     const newX = snappedDraggedPos.x + (draggedBottomPoint.x * main.APP_SCALE) - (displacedTopPoint.x * main.APP_SCALE);
                     const newY = snappedDraggedPos.y + (draggedBottomPoint.y * main.APP_SCALE) - (displacedTopPoint.y * main.APP_SCALE);
-                    displacedEl.setAttribute('x', newX);
-                    displacedEl.setAttribute('y', newY);
+                    const deltaX = newX - displacedBlock.transform.x;
+                    const deltaY = newY - displacedBlock.transform.y;
+                    const groupToMove = getDragGroup(newSnapInfo.originalChildId, allBlocks);
+                    groupToMove.forEach(blockId => {
+                        const blockEl = document.getElementById(blockId);
+                        const originalTransform = allBlocks[blockId].transform;
+                        if (blockEl) {
+                            blockEl.setAttribute('x', originalTransform.x + deltaX);
+                            blockEl.setAttribute('y', originalTransform.y + deltaY);
+                        }
+                    });
                 }
             }
         }
@@ -233,7 +241,7 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         });
         updateActiveVisualizers(finalPos);
 
-        if(newSnapInfo && newSnapInfo.snapType === 'insertion' && displacedBlockInfo){
+        if(newSnapInfo && newSnapInfo.snapType === 'insertion' && displacedChainInfo){
             handleSnapEnter(newSnapInfo);
         }
     }

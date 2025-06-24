@@ -51,13 +51,14 @@ function calculateChainHeight(startBlockId) {
     while (currentBlockId) {
         const currentBlock = blockSpace[currentBlockId];
         if (!currentBlock) break;
-        currentBlock.sizes.forEach(size => {
-            totalHeight += size.height;
-            const isLoopBlock = currentBlock.sizes.length > 1;
-            if (isLoopBlock && size.loop && size.loop.height > 0) {
-                totalHeight += size.loop.height;
+        let blockFootprint = 0;
+        currentBlock.sizes.forEach(branch => {
+            blockFootprint += branch.height;
+            if (branch.loop && branch.loop.height > 0) {
+                 blockFootprint += branch.loop.height;
             }
         });
+        totalHeight += blockFootprint;
         currentBlockId = currentBlock.children['bottom'];
     }
     return totalHeight;
