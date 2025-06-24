@@ -70,31 +70,22 @@ function generateShape(uuid, type, colors, sizes) {
 
 // --- Core Sizing & Layout Logic ---
 
-/**
- * FIX: Calculates a block's height based on its solid parts ONLY.
- * It IGNORES the block's own internal loop area. This is essential for
- * accurately calculating the required size of a PARENT loop.
- */
 function getBlockVisualHeight(blockId) {
     const block = appState.blockSpace[blockId];
     if (!block) return 0;
     let height = 0;
     block.sizes.forEach(branch => {
-        height += branch.height; // Only sum the solid branch heights
+        height += branch.height;
     });
     return height;
 }
 
-/**
- * Calculates the total height of a full chain of blocks.
- * FIX: This now uses getBlockVisualHeight to get an accurate sum.
- */
 function calculateChainHeight(startBlockId) {
     if (!startBlockId) return 0;
     let totalHeight = 0;
     let currentBlockId = startBlockId;
     while (currentBlockId) {
-        totalHeight += getBlockVisualHeight(currentBlockId); // Use the corrected height function
+        totalHeight += getBlockVisualHeight(currentBlockId);
         const currentBlock = appState.blockSpace[currentBlockId];
         currentBlockId = currentBlock?.children['bottom'];
     }
@@ -120,7 +111,6 @@ function updateLoopBranchHeight(loopBlockId, previewContext = null) {
                 chainHeight += calculateChainHeight(previewContext.draggedBlockId);
             }
 
-            // Correct Logic: If the chain has content, use its height. Otherwise, use the minimum.
             const newLoopHeight = chainHeight > 0 ? chainHeight : MIN_LOOP_HEIGHT;
 
             if (branch.loop.height !== newLoopHeight) {
@@ -135,11 +125,6 @@ function updateLoopBranchHeight(loopBlockId, previewContext = null) {
             generateShape(loopBlockId, loopBlock.type, loopBlock.colors, newSizes);
         } else {
             editBlock(loopBlockId, { sizes: newSizes });
-            // FIX: If the updated block is the one being edited, refresh its sliders
-            // to show the new "auto" loop height.
-            if (loopBlockId === appState.targetID) {
-                renderDimensionSliders();
-            }
         }
     }
 }
@@ -275,9 +260,7 @@ function editBlock(uuid, updates) {
 
 function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
     let uuid;
-    do {
-        uuid = crypto.randomUUID();
-    } while (appState.blockSpace.hasOwnProperty(uuid));
+    do { uuid = crypto.randomUUID(); } while (appState.blockSpace.hasOwnProperty(uuid));
     
     const sizes = [{ height: 1, width: 1, loop: { height: MIN_LOOP_HEIGHT } }];
     const blockData = blocks.Block(type, colors, sizes);
@@ -306,7 +289,6 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
 
 function removeBlock(uuid) {
     if (!appState.blockSpace[uuid]) return;
-
     const groupToRemove = getDragGroup(uuid, appState.blockSpace, []);
     handleDetach(uuid);
 
@@ -341,14 +323,28 @@ function onSnapPreviewEnd(snapInfo) {
     }
 }
 
+/**
+ * FIX: This function is now the single source of truth for ensuring
+ * a parent block is fully updated after one of its children is detached.
+ */
 function handleDetach(childId) {
     const childBlock = appState.blockSpace[childId];
     if (!childBlock) return;
+
     const oldParentId = childBlock.parent;
     setParent(childId, null, null);
+
     if (oldParentId) {
+        // Recalculate the parent's loop size, which triggers a redraw of its SVG shape.
         updateLoopBranchHeight(oldParentId);
+        // Propagate changes further up the chain.
         notifyAncestorsOfChange(oldParentId);
+
+        // FIX: If the parent that just lost a child is the one currently being
+        // edited, we must also refresh its UI controls to show the new (auto) loop height.
+        if (oldParentId === appState.targetID) {
+            renderDimensionSliders();
+        }
     }
 }
 
