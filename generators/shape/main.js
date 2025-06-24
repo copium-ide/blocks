@@ -10,7 +10,7 @@ const workSpace = document.getElementById('workspace');
 const blockSpace = {};
 let targetID = null;
 
-// MOVED: All UI element variables are now declared at the top of the script.
+// UI elements
 const hinput = document.getElementById("h");
 const winput = document.getElementById("w");
 const typeinput = document.getElementById("type");
@@ -21,35 +21,25 @@ const slidersContainer = document.getElementById("sliders");
 
 
 // --- UTILITY & HELPER FUNCTIONS ---
-// (Defined first to prevent ReferenceErrors)
 
-/**
- * Sets the workspace viewBox to match its pixel dimensions.
- * This creates a 1 unit = 1 pixel coordinate system.
- */
 function setupWorkspaceViewBox() {
     if (!workSpace) return;
     const box = workSpace.getBoundingClientRect();
     workSpace.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
 }
 
-/**
- * Recursively gets an array of IDs for a block and all its descendants.
- */
 function getDragGroup(blockId, allBlocks) {
     let group = [blockId];
     const block = allBlocks[blockId];
-    if (block && block.children.length > 0) {
-        for (const childId of block.children) {
+    // **UPDATED**: Iterate over the values of the children object.
+    if (block && block.children) {
+        for (const childId of Object.values(block.children)) {
             group = group.concat(getDragGroup(childId, allBlocks));
         }
     }
     return group;
 }
 
-/**
- * Renders the shape of a block using the svg.js generator.
- */
 function generateShape(uuid, type, colors, sizes) {
     const shapeData = blocks.Block(type, colors, sizes);
     const blockElm = document.getElementById(uuid);
@@ -58,22 +48,18 @@ function generateShape(uuid, type, colors, sizes) {
     }
 }
 
-/**
- * Clears all dynamically generated dimension sliders.
- */
 function clearSliders() {
-    if (slidersContainer) {
-        slidersContainer.innerHTML = '';
-    }
+    if (slidersContainer) slidersContainer.innerHTML = '';
 }
 
 
 // --- CORE LOGIC & STATE MANAGEMENT ---
 
 /**
- * Manages the parent-child relationships in the data model.
+ * **UPDATED**: Manages parent-child relationships using the new data model.
+ * Connects a child to a specific snap point on the parent.
  */
-function setParent(childId, newParentId) {
+function setParent(childId, newParentId, parentSnapPointName) {
     const childBlock = blockSpace[childId];
     if (!childBlock) return;
 
@@ -81,42 +67,44 @@ function setParent(childId, newParentId) {
     const oldParentId = childBlock.parent;
     if (oldParentId && blockSpace[oldParentId]) {
         const oldParent = blockSpace[oldParentId];
-        const childIndex = oldParent.children.indexOf(childId);
-        if (childIndex > -1) {
-            oldParent.children.splice(childIndex, 1);
+        // Find which snap point the child was connected to and remove it.
+        for (const pointName in oldParent.children) {
+            if (oldParent.children[pointName] === childId) {
+                delete oldParent.children[pointName];
+                break; 
+            }
         }
     }
 
-    // 2. Set new parent on child
+    // 2. Set new parent on child (or clear it)
     childBlock.parent = newParentId;
 
-    // 3. Attach to new parent (if any)
-    if (newParentId && blockSpace[newParentId]) {
+    // 3. Attach to new parent's specific snap point (if any)
+    if (newParentId && parentSnapPointName && blockSpace[newParentId]) {
         const newParent = blockSpace[newParentId];
-        if (!newParent.children.includes(childId)) {
-            newParent.children.push(childId);
-        }
+        newParent.children[parentSnapPointName] = childId;
     }
 }
 
 /**
- * Callback for when a drag operation ends. Handles parenting and group position updates.
+ * **UPDATED**: Handles the new snapInfo object from drag.js.
  */
-function onDragEnd(draggedBlockId, finalTransform, snapTargetId) {
+function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
     const mainDraggedBlock = blockSpace[draggedBlockId];
     if (!mainDraggedBlock) return;
 
-    // 1. Update parent-child relationship in the data model.
-    setParent(draggedBlockId, snapTargetId);
+    const newParentId = snapInfo ? snapInfo.targetId : null;
+    const parentSnapPointName = snapInfo ? snapInfo.malePoint.name : null;
 
-    // 2. Calculate how much the main block moved.
+    // 1. Update parent-child relationship in the data model.
+    setParent(draggedBlockId, newParentId, parentSnapPointName);
+
+    // 2. Calculate delta and update all block positions in the group.
     const startPos = mainDraggedBlock.transform;
     const delta = {
         x: finalTransform.x - startPos.x,
         y: finalTransform.y - startPos.y,
     };
-
-    // 3. Apply that same movement to the entire drag group in our data model.
     const groupIds = getDragGroup(draggedBlockId, blockSpace);
     groupIds.forEach(id => {
         const block = blockSpace[id];
@@ -127,26 +115,17 @@ function onDragEnd(draggedBlockId, finalTransform, snapTargetId) {
     });
 }
 
-/**
- * Updates an existing block's data and regenerates its shape.
- */
 function editBlock(uuid, type, colors, sizes) {
     if (!blockSpace[uuid]) return;
-    
     const block = blockSpace[uuid];
     block.type = type;
     block.colors = colors;
     block.sizes = sizes;
-    
     const shapeData = blocks.Block(type, colors, sizes);
     block.snapPoints = shapeData.snapPoints;
-
     generateShape(uuid, type, colors, sizes);
 }
 
-/**
- * Populates the block selection dropdown menu.
- */
 function populateSelector(obj) {
   const currentVal = uuidinput.value;
   uuidinput.innerHTML = '';
@@ -161,9 +140,8 @@ function populateSelector(obj) {
   }
 }
 
-/**
- * Updates the UI sliders based on the currently selected block.
- */
+// ... updateDimensionSliders and updateBlockColor are unchanged ...
+
 function updateDimensionSliders() {
     clearSliders();
     if (!targetID || !blockSpace[targetID]) return;
@@ -251,9 +229,6 @@ function updateDimensionSliders() {
     });
 }
 
-/**
- * Updates the color of the currently selected block.
- */
 function updateBlockColor() {
   if (targetID && blockSpace[targetID]) {
     const block = blockSpace[targetID];
@@ -262,9 +237,6 @@ function updateBlockColor() {
   }
 }
 
-/**
- * Creates a new block and adds it to the workspace.
- */
 function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
   const uuid = crypto.randomUUID();
   if (blockSpace.hasOwnProperty(uuid)) {
@@ -279,7 +251,7 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
       sizes: sizes, 
       transform: { x: 420, y: 50 },
       parent: null,
-      children: []
+      children: {} // **UPDATED**: Use an object for children
   };
   
   const shapeData = blocks.Block(type, colors, sizes);
@@ -293,7 +265,6 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
   blockELM.setAttribute('y', block.transform.y);
   
   workSpace.appendChild(blockELM);
-  
   generateShape(uuid, type, colors, sizes);
 
   populateSelector(blockSpace);
@@ -303,19 +274,13 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
   return block;
 }
 
-/**
- * **IMPROVED**: Removes a block and all of its children from the workspace.
- */
 function removeBlock(uuid) {
     if (!blockSpace[uuid]) return;
-
-    // Get the block itself and all its children recursively
     const groupToRemove = getDragGroup(uuid, blockSpace);
+    
+    // **UPDATED**: Detach the top-level block from its parent chain using the new logic.
+    setParent(uuid, null, null); 
 
-    // Detach the top-level block from its parent chain
-    setParent(uuid, null);
-
-    // Remove all blocks in the group from memory and the DOM
     groupToRemove.forEach(idToRemove => {
         if (blockSpace[idToRemove]) {
             delete blockSpace[idToRemove];
@@ -324,14 +289,12 @@ function removeBlock(uuid) {
         }
     });
 
-    // Update UI if the currently selected block was part of the removed group
     if (groupToRemove.includes(targetID)) {
         const remainingKeys = Object.keys(blockSpace);
         targetID = remainingKeys.length > 0 ? remainingKeys[0] : null;
         if (targetID) {
             document.getElementById('blockType').value = targetID;
         } else {
-            // Clear dropdown if no blocks are left
             uuidinput.innerHTML = ''; 
         }
         updateDimensionSliders();
@@ -341,16 +304,14 @@ function removeBlock(uuid) {
 
 
 // --- INITIALIZATION & EVENT LISTENERS ---
+// This section remains unchanged.
 if (workSpace) {
     setupWorkspaceViewBox();
     window.addEventListener('resize', setupWorkspaceViewBox);
-
     drag.makeDraggable(workSpace, blockSpace, onDragEnd);
     createBlock("hat");
-
     color1input.addEventListener("input", updateBlockColor);
     color2input.addEventListener("input", updateBlockColor);
-
     typeinput.addEventListener("change", () => {
         if (targetID && blockSpace[targetID]) {
             const block = blockSpace[targetID];
@@ -358,12 +319,10 @@ if (workSpace) {
             updateDimensionSliders();
         }
     });
-
     uuidinput.addEventListener("change", () => {
         targetID = uuidinput.value;
         updateDimensionSliders();
     });
-
     hinput.addEventListener("input", () => {
         if (targetID && blockSpace[targetID]) {
             const block = blockSpace[targetID];
@@ -372,7 +331,6 @@ if (workSpace) {
             editBlock(targetID, block.type, block.colors, block.sizes);
         }
     });
-
     winput.addEventListener("input", () => {
         if (targetID && blockSpace[targetID]) {
             const block = blockSpace[targetID];
@@ -381,7 +339,6 @@ if (workSpace) {
             editBlock(targetID, block.type, block.colors, block.sizes);
         }
     });
-
     document.getElementById('addBranch').addEventListener('click', () => {
         if (targetID && blockSpace[targetID]) {
             blockSpace[targetID].sizes.push({ height: 1, width: 1, loop: { height: 1 } });
@@ -389,17 +346,14 @@ if (workSpace) {
             editBlock(targetID, blockSpace[targetID].type, blockSpace[targetID].colors, blockSpace[targetID].sizes);
         }
     });
-
     document.getElementById('create').addEventListener('click', () => {
         createBlock(typeinput.value);
     });
-
     document.getElementById('remove').addEventListener('click', () => {
         if (targetID) {
             removeBlock(targetID);
         }
     });
-
 } else {
     console.error("The <svg id='workspace'> element was not found.");
 }
