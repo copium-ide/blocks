@@ -1,5 +1,6 @@
 import * as main from "./main.js";
 export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
+  // SNAP_RADIUS is a constant in screen pixels for a consistent feel regardless of scale.
   const SNAP_RADIUS = 20;
 
   let isDragging = false;
@@ -24,6 +25,10 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
   // function getCurrentTranslation(element) { ... }
 
   function checkForSnap(draggedBlockId, currentPos) {
+    // Since all our coordinates are in the SVG's unscaled coordinate space,
+    // we must convert the screen-pixel SNAP_RADIUS into that same space by dividing by the scale.
+    const effectiveSnapRadius = SNAP_RADIUS / main.APP_SCALE;
+
     const draggedBlockData = allBlocks[draggedBlockId];
     if (!draggedBlockData || !draggedBlockData.snapPoints) return null;
 
@@ -45,7 +50,7 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
             const targetY = staticBlockData.transform.y + femalePoint.y - malePoint.y;
             const distance = Math.sqrt(Math.pow(currentPos.x - targetX, 2) + Math.pow(currentPos.y - targetY, 2));
 
-            if (distance < SNAP_RADIUS && distance < closestSnap.distance) {
+            if (distance < effectiveSnapRadius && distance < closestSnap.distance) {
               closestSnap = { distance, position: { x: targetX, y: targetY } };
             }
           }
@@ -92,7 +97,7 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
     const coord = getSVGCoordinates(event);
     const mouseDrivenPos = { x: coord.x - offset.x, y: coord.y - offset.y };
 
-    const snappedPos = checkForSnap(selectedElement.id, {x: mouseDrivenPos.x*main.APP_SCALE, y: mouseDrivenPos.y*main.APP_SCALE});
+    const snappedPos = checkForSnap(selectedElement.id, mouseDrivenPos);
     const finalPos = snappedPos || mouseDrivenPos;
     
     // Update position using SVG attributes for better performance.
