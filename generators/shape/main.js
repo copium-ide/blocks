@@ -142,7 +142,11 @@ function updateLoopSize(loopBlockId, previewData = null) {
         if (previewData) {
             generateShape(loopBlockId, loopBlock.type, loopBlock.colors, tempSizes);
         } else {
-            editBlock(loopBlockId, loopBlock.type, loopBlock.colors, loopBlock.sizes);
+            // FIX: Instead of calling editBlock (which causes recursion),
+            // directly update the data and trigger a visual refresh.
+            loopBlock.sizes = tempSizes;
+            generateShape(loopBlockId, loopBlock.type, loopBlock.colors, loopBlock.sizes);
+            updateLayout(loopBlockId);
         }
     }
 }
@@ -174,8 +178,7 @@ function editBlock(uuid, type, colors, sizes) {
     block.type = type;
     block.colors = colors;
     block.sizes = sizes;
-    const shapeData = blocks.Block(type, colors, sizes);
-    block.snapPoints = shapeData.snapPoints;
+    block.snapPoints = blocks.Block(type, colors, sizes).snapPoints;
     generateShape(uuid, type, colors, sizes);
     updateLayout(uuid);
     notifyAncestorsOfChange(uuid);
