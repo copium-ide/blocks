@@ -1,3 +1,4 @@
+import APP_SCALE from "./main";
 export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
   const SNAP_RADIUS = 20;
 
@@ -89,7 +90,7 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
     if (event.cancelable) event.preventDefault();
     
     const coord = getSVGCoordinates(event);
-    const mouseDrivenPos = { x: coord.x - offset.x, y: coord.y - offset.y };
+    const mouseDrivenPos = { x: coord.x - offset.x*APP_SCALE, y: coord.y - offset.y*APP_SCALE };
 
     const snappedPos = checkForSnap(selectedElement.id, mouseDrivenPos);
     const finalPos = snappedPos || mouseDrivenPos;

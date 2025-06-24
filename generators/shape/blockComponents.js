@@ -19,7 +19,7 @@ export function branch(colors, sizes, top, bottom) {
                 ...notch(0, 0, true),
             );
             // Add the female snap point for the top notch
-            finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: 0, type: 'block', role: 'female' });
+            finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: 0, type: 'block', role: 'female', name: 'top'});
         } else if (top === 'hat') {
             finalShape.points.push(
                 {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
@@ -55,7 +55,7 @@ export function branch(colors, sizes, top, bottom) {
                 ...loop(0 + offset+dHeight, bHeight),
             ];
             // Add the female snap point for the top notch (only on the first branch)
-            finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: 0, type: 'block', role: 'female' });
+            finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: 0, type: 'block', role: 'female', name: 'top'});
         } else if (top === 'hat') {
             shape = [
                 {x: 0, y: 0 + offset, cornerRadius: CORNER_RADIUS},
@@ -79,9 +79,9 @@ export function branch(colors, sizes, top, bottom) {
       
       // Add snap points for the C-shaped loop
       // A male snap point inside the loop to connect a nested stack.
-      finalShape.snapPoints.push({ x: LOOP_OFFSET + NOTCH_CONNECT_X, y: offset + dHeight, type: 'block', role: 'male' });
+      finalShape.snapPoints.push({ x: LOOP_OFFSET + NOTCH_CONNECT_X, y: offset + dHeight, type: 'block', role: 'male', name: 'topInner'+i});
       // A female snap point below the loop for the next branch in this stack.
-      finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: offset + dHeight + bHeight, type: 'block', role: 'female' });
+      finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: offset + dHeight + bHeight, type: 'block', role: 'female', name: 'tbottomInner'+i});
   
       finalShape.points.push(...shape);
       finalOffset = offset + dHeight + bHeight;
@@ -98,7 +98,7 @@ export function branch(colors, sizes, top, bottom) {
             {x: 0, y: 0 + finalOffset+dHeight, cornerRadius: CORNER_RADIUS},
         ];
         // Add the male snap point for the bottom notch
-        finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: finalOffset + dHeight, type: 'block', role: 'male' });
+        finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: finalOffset + dHeight, type: 'block', role: 'male', name: 'bottom'});
     } else if (bottom === 'flat') {
         lastShape = [
             ...block(finalOffset, dWidth, dHeight),
