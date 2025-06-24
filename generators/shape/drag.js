@@ -1,7 +1,7 @@
 import * as main from "./main.js";
 
 export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
-  const SNAP_RADIUS = 100; // In screen pixels
+  const SNAP_RADIUS = 20; // In screen pixels
 
   let isDragging = false;
   let selectedElement = null;
@@ -39,7 +39,6 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
       blockData.snapPoints.forEach((point, index) => {
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         
-        // **UPDATED**: Multiply the local snap point offset by APP_SCALE to get its true world offset.
         const cx = blockData.transform.x + (point.x * main.APP_SCALE);
         const cy = blockData.transform.y + (point.y * main.APP_SCALE);
         
@@ -52,13 +51,22 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
         circle.dataset.blockId = blockId;
         circle.dataset.pointIndex = index;
 
+        // **UPDATED**: New coloring logic to reflect female-to-male snapping.
         const isSelectedBlock = blockId === selectedElement.id;
-        if (point.role === 'male' && isSelectedBlock) {
-          circle.setAttribute('fill', 'rgba(255, 100, 100, 0.7)');
-        } else if (point.role === 'female') {
-          circle.setAttribute('fill', 'rgba(255, 255, 0, 0.7)');
+        if (isSelectedBlock) {
+            // This is the block being dragged
+            if (point.role === 'female') {
+                circle.setAttribute('fill', 'rgba(255, 100, 100, 0.8)'); // Active "plug" is now the female point
+            } else {
+                circle.setAttribute('fill', 'rgba(100, 100, 255, 0.5)'); // Inactive socket on the dragged block
+            }
         } else {
-          circle.setAttribute('fill', 'rgba(100, 100, 255, 0.5)');
+            // This is a static block in the background
+            if (point.role === 'male') {
+                circle.setAttribute('fill', 'rgba(255, 255, 0, 0.8)'); // Target "socket" is now the male point
+            } else {
+                circle.setAttribute('fill', 'rgba(150, 150, 150, 0.5)'); // Inactive plug on a static block
+            }
         }
 
         snapPointVisualizerGroup.appendChild(circle);
@@ -76,7 +84,6 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
       const pointIndex = parseInt(circle.dataset.pointIndex, 10);
       const point = blockData.snapPoints[pointIndex];
       if (point) {
-        // **UPDATED**: Also multiply here when updating the dragged block's visualizers.
         circle.setAttribute('cx', newBlockPos.x + (point.x * main.APP_SCALE));
         circle.setAttribute('cy', newBlockPos.y + (point.y * main.APP_SCALE));
       }
@@ -91,14 +98,13 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
   }
 
   function checkForSnap(draggedBlockId, currentPos) {
-    // This calculation remains the same: we convert a screen-space radius to a world-space radius.
     const effectiveSnapRadius = SNAP_RADIUS / main.APP_SCALE;
-
     const draggedBlockData = allBlocks[draggedBlockId];
     if (!draggedBlockData || !draggedBlockData.snapPoints) return null;
 
-    const maleSnapPoints = draggedBlockData.snapPoints.filter(p => p.role === 'male');
-    if (maleSnapPoints.length === 0) return null;
+    // **UPDATED**: We now look for FEMALE points on the block being dragged.
+    const femaleSnapPoints = draggedBlockData.snapPoints.filter(p => p.role === 'female');
+    if (femaleSnapPoints.length === 0) return null;
 
     let closestSnap = { distance: Infinity, position: null };
 
@@ -107,13 +113,14 @@ export function makeDraggable(svgContainer, allBlocks, onPositionUpdate) {
       const staticBlockData = allBlocks[blockId];
       if (!staticBlockData.snapPoints || !staticBlockData.transform) continue;
 
-      const femaleSnapPoints = staticBlockData.snapPoints.filter(p => p.role === 'female');
-      for (const malePoint of maleSnapPoints) {
-        for (const femalePoint of femaleSnapPoints) {
-          if (malePoint.type === femalePoint.type) {
-            // **UPDATED**: Calculate the target position by scaling the local snap point offsets.
-            const targetX = staticBlockData.transform.x + (femalePoint.x * main.APP_SCALE) - (malePoint.x * main.APP_SCALE);
-            const targetY = staticBlockData.transform.y + (femalePoint.y * main.APP_SCALE) - (malePoint.y * main.APP_SCALE);
+      // **UPDATED**: And we look for MALE points on the static blocks to snap to.
+      const maleSnapPoints = staticBlockData.snapPoints.filter(p => p.role === 'male');
+      for (const femalePoint of femaleSnapPoints) {
+        for (const malePoint of maleSnapPoints) {
+          if (femalePoint.type === malePoint.type) {
+            // **UPDATED**: The calculation is reversed to align the female point to the male point.
+            const targetX = staticBlockData.transform.x + (malePoint.x * main.APP_SCALE) - (femalePoint.x * main.APP_SCALE);
+            const targetY = staticBlockData.transform.y + (malePoint.y * main.APP_SCALE) - (femalePoint.y * main.APP_SCALE);
             
             const distance = Math.sqrt(Math.pow(currentPos.x - targetX, 2) + Math.pow(currentPos.y - targetY, 2));
 
