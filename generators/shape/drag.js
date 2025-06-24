@@ -4,7 +4,6 @@ import * as main from "./main.js";
 function getDragGroup(blockId, allBlocks) {
     let group = [blockId];
     const block = allBlocks[blockId];
-    // **UPDATED**: Iterate over the values of the children object.
     if (block && block.children) {
         for (const childId of Object.values(block.children)) {
             group = group.concat(getDragGroup(childId, allBlocks));
@@ -13,7 +12,8 @@ function getDragGroup(blockId, allBlocks) {
     return group;
 }
 
-export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
+// **UPDATED**: New onDetach callback added
+export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach) {
   const SNAP_RADIUS = 100; // In screen pixels
 
   let isDragging = false;
@@ -36,6 +36,8 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
     return ctm ? pt.matrixTransform(ctm.inverse()) : { x: 0, y: 0 };
   }
 
+  // ... createSnapVisualizers, updateActiveVisualizers, removeSnapVisualizers are unchanged ...
+
   function createSnapVisualizers() {
     if (snapPointVisualizerGroup) removeSnapVisualizers();
     
@@ -54,29 +56,25 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
       if (!blockData.snapPoints || !blockData.transform) continue;
 
       blockData.snapPoints.forEach((point, index) => {
-        // **UPDATED**: Only show male points that are NOT already occupied.
         if (point.role === 'male' && (!blockData.children || !blockData.children[point.name])) {
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            
             const cx = blockData.transform.x + (point.x * main.APP_SCALE);
             const cy = blockData.transform.y + (point.y * main.APP_SCALE);
-            
             circle.setAttribute('cx', cx);
             circle.setAttribute('cy', cy);
             circle.setAttribute('r', circleRadius);
             circle.setAttribute('stroke', 'rgba(0,0,0,0.5)');
             circle.setAttribute('stroke-width', 1 / main.APP_SCALE);
-            
             circle.dataset.blockId = blockId;
             circle.dataset.pointIndex = index;
-            
-            circle.setAttribute('fill', 'rgba(255, 255, 0, 0.8)'); // Available target socket
+            circle.setAttribute('fill', 'rgba(255, 255, 0, 0.8)');
             snapPointVisualizerGroup.appendChild(circle);
         }
       });
     }
-    // Also visualize the active "female" points on the block being dragged
     const draggedBlockData = allBlocks[selectedElement.id];
+    // **UPDATED**: Only show female snap points if the block is un-parented.
+    // This happens immediately on drag now, so this check works.
     if (draggedBlockData && draggedBlockData.snapPoints && !draggedBlockData.parent) {
         draggedBlockData.snapPoints.forEach(point => {
             if (point.role === 'female') {
@@ -85,7 +83,7 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
                 circle.setAttribute('stroke', 'rgba(0,0,0,0.5)');
                 circle.setAttribute('stroke-width', 1 / main.APP_SCALE);
                 circle.setAttribute('fill', 'rgba(255, 100, 100, 0.8)');
-                circle.dataset.blockId = selectedElement.id; // Mark as part of the active group
+                circle.dataset.blockId = selectedElement.id;
                 snapPointVisualizerGroup.appendChild(circle);
             }
         });
@@ -94,13 +92,10 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
 
   function updateActiveVisualizers(newBlockPos) {
     if (!snapPointVisualizerGroup || !selectedElement) return;
-
     const activeCircles = snapPointVisualizerGroup.querySelectorAll(`[data-block-id="${selectedElement.id}"]`);
     const blockData = allBlocks[selectedElement.id];
-    if (!blockData.snapPoints) return;
-
+    if (!blockData || !blockData.snapPoints) return;
     const femalePoints = blockData.snapPoints.filter(p => p.role === 'female');
-
     activeCircles.forEach((circle, index) => {
       const point = femalePoints[index];
       if (point) {
@@ -110,19 +105,19 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
     });
   }
 
-  function removeSnapVisualizers() {
+   function removeSnapVisualizers() {
     if (snapPointVisualizerGroup) {
       snapPointVisualizerGroup.remove();
       snapPointVisualizerGroup = null;
     }
   }
 
+
   function checkForSnap(draggedBlockId, currentPos, dragGroupIds) {
     const effectiveSnapRadius = SNAP_RADIUS / main.APP_SCALE;
     const draggedBlockData = allBlocks[draggedBlockId];
     
-    // **UPDATED**: Don't allow snapping if the dragged block already has a parent.
-    // The user must first detach it by dragging it away.
+    // This check is now robust because the parent is detached on startDrag
     if (!draggedBlockData || !draggedBlockData.snapPoints || draggedBlockData.parent) return null;
 
     const femaleSnapPoints = draggedBlockData.snapPoints.filter(p => p.role === 'female');
@@ -139,9 +134,8 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
 
       for (const femalePoint of femaleSnapPoints) {
         for (const malePoint of maleSnapPoints) {
-            // **UPDATED**: Add a check to see if the target male point is already occupied.
             if (staticBlockData.children && staticBlockData.children[malePoint.name]) {
-                continue; // This snap point is taken, skip it.
+                continue;
             }
 
           if (femalePoint.type === malePoint.type) {
@@ -155,7 +149,7 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
                 distance, 
                 position: { x: targetX, y: targetY },
                 targetId: blockId,
-                malePoint: malePoint,   // **NEW**: Store the specific points
+                malePoint: malePoint,
                 femalePoint: femalePoint
               };
             }
@@ -174,20 +168,26 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
       isDragging = true;
       selectedElement = target;
       
-      const mainBlockStartPos = allBlocks[selectedElement.id]?.transform || { x: 0, y: 0 };
+      // **NEW**: Immediately detach the block from its parent if it has one.
+      const blockData = allBlocks[selectedElement.id];
+      if (blockData && blockData.parent && onDetach) {
+          onDetach(selectedElement.id);
+      }
+      
+      const mainBlockStartPos = blockData.transform || { x: 0, y: 0 };
       const dragGroupIds = getDragGroup(selectedElement.id, allBlocks);
       dragGroup = [];
       dragGroupIds.forEach(id => {
           const el = document.getElementById(id);
-          const blockData = allBlocks[id];
-          if (el && blockData?.transform) {
+          const currentBlockData = allBlocks[id];
+          if (el && currentBlockData?.transform) {
               svgContainer.appendChild(el);
               dragGroup.push({
                   id: id,
                   el: el,
                   relativeOffset: {
-                      x: blockData.transform.x - mainBlockStartPos.x,
-                      y: blockData.transform.y - mainBlockStartPos.y
+                      x: currentBlockData.transform.x - mainBlockStartPos.x,
+                      y: currentBlockData.transform.y - mainBlockStartPos.y
                   }
               });
           }
@@ -210,6 +210,7 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
     }
   }
 
+  // drag and endDrag functions are unchanged from the previous version
   function drag(event) {
     if (!isDragging || !selectedElement) return;
     if (event.cancelable) event.preventDefault();
@@ -253,8 +254,6 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd) {
         
         const dragGroupIds = dragGroup.map(item => item.id);
         const snapInfo = checkForSnap(selectedElement.id, finalTransform, dragGroupIds);
-
-        // **UPDATED**: Pass the entire snapInfo object back to main.js
         onDragEnd(selectedElement.id, finalTransform, snapInfo);
       }
       selectedElement.classList.remove('active');
