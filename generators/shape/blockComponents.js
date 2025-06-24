@@ -81,7 +81,7 @@ export function branch(colors, sizes, top, bottom) {
       // A male snap point inside the loop to connect a nested stack.
       finalShape.snapPoints.push({ x: LOOP_OFFSET + NOTCH_CONNECT_X, y: offset + dHeight, type: 'block', role: 'male', name: 'topInner'+i});
       // A female snap point below the loop for the next branch in this stack.
-      finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: offset + dHeight + bHeight, type: 'block', role: 'female', name: 'tbottomInner'+i});
+      finalShape.snapPoints.push({ x: LOOP_OFFSET + NOTCH_CONNECT_X, y: offset + dHeight + bHeight, type: 'block', role: 'female', name: 'tbottomInner'+i});
   
       finalShape.points.push(...shape);
       finalOffset = offset + dHeight + bHeight;
