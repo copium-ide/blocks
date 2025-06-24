@@ -7,7 +7,8 @@ import * as drag from './drag.js';
 // ================================================================================= //
 
 export const APP_SCALE = 8;
-const MIN_LOOP_HEIGHT = 1;
+// **FIX 1**: Changed the minimum loop height to 0.5.
+const MIN_LOOP_HEIGHT = 0.5;
 
 const workSpace = document.getElementById('workspace');
 const blockSpace = {};
@@ -56,33 +57,20 @@ function clearSliders() {
     if (slidersContainer) slidersContainer.innerHTML = '';
 }
 
-/**
- * **FIXED**: Calculates the total height of a connected chain of blocks.
- * @param {string} startBlockId The ID of the first block in the chain.
- * @returns {number} The total height of the chain.
- */
 function calculateChainHeight(startBlockId) {
     if (!startBlockId || !blockSpace[startBlockId]) return 0;
-
     let totalHeight = 0;
     let currentBlockId = startBlockId;
-
     while (currentBlockId) {
         const currentBlock = blockSpace[currentBlockId];
         if (!currentBlock) break;
-
         currentBlock.sizes.forEach(size => {
             totalHeight += size.height;
-
-            // THE FIX: A block is only a "loop" if it has multiple branches.
-            // Only add the loop gap height for actual C-shaped loop blocks.
             const isLoopBlock = currentBlock.sizes.length > 1;
-
             if (isLoopBlock && size.loop && size.loop.height > 0) {
                 totalHeight += size.loop.height;
             }
         });
-
         currentBlockId = currentBlock.children['bottom'];
     }
     return totalHeight;
@@ -327,12 +315,17 @@ function handleDetach(childId) {
 function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
     const mainDraggedBlock = blockSpace[draggedBlockId];
     if (!mainDraggedBlock) return;
+
+    // Update the data model position of the dragged block(s)
     const startPos = mainDraggedBlock.transform;
     const delta = { x: finalTransform.x - startPos.x, y: finalTransform.y - startPos.y };
     getDragGroup(draggedBlockId, blockSpace).forEach(id => {
         if (blockSpace[id]) blockSpace[id].transform = { x: blockSpace[id].transform.x + delta.x, y: blockSpace[id].transform.y + delta.y };
     });
-    if (!snapInfo) return;
+
+    if (!snapInfo) return; // No snap, leave block floating
+
+    // Handle the parenting logic based on snap type
     if (snapInfo.snapType === 'insertion') {
         const { parentId, originalChildId, parentSnapPoint } = snapInfo;
         const draggedBlockBottomPoint = mainDraggedBlock.snapPoints.find(p => p.role === 'male' && p.name === 'bottom');
@@ -344,9 +337,17 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
     } else if (snapInfo.snapType === 'append') {
         setParent(draggedBlockId, snapInfo.parentId, snapInfo.parentSnapPoint.name);
     }
+
+    // Trigger layout and size updates
     if (snapInfo.parentId) {
         notifyAncestorsOfChange(snapInfo.parentId);
         updateLayout(snapInfo.parentId);
+    }
+    
+    // **FIX 2**: If it was an insertion, the newly inserted block must now
+    // update the layout of its *new* child (the one that was pushed down).
+    if (snapInfo.snapType === 'insertion') {
+        updateLayout(draggedBlockId);
     }
 }
 
