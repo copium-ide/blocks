@@ -104,15 +104,20 @@ function updateLoopBranchHeight(loopBlockId, previewContext = null) {
     for (let i = 0; i < newSizes.length; i++) {
         const branch = newSizes[i];
         if (branch.loop) {
+            let newLoopHeight;
             const innerChainStartId = loopBlock.children['topInner' + i];
-            let chainHeight = calculateChainHeight(innerChainStartId);
 
-            if (previewContext && previewContext.snapPointName === 'topInner' + i) {
-                chainHeight += calculateChainHeight(previewContext.draggedBlockId);
+            if (innerChainStartId) {
+                newLoopHeight = calculateChainHeight(innerChainStartId);
+            } else {
+                newLoopHeight = MIN_LOOP_HEIGHT;
             }
 
-            const newLoopHeight = chainHeight > 0 ? chainHeight : MIN_LOOP_HEIGHT;
-
+            if (previewContext && previewContext.snapPointName === 'topInner' + i) {
+                newLoopHeight = (newLoopHeight === MIN_LOOP_HEIGHT ? 0 : newLoopHeight);
+                newLoopHeight += calculateChainHeight(previewContext.draggedBlockId);
+            }
+            
             if (branch.loop.height !== newLoopHeight) {
                 branch.loop.height = newLoopHeight;
                 needsRedraw = true;
@@ -133,10 +138,10 @@ function notifyAncestorsOfChange(startBlockId) {
     let parentId = appState.blockSpace[startBlockId]?.parent;
     while (parentId) {
         const parentBlock = appState.blockSpace[parentId];
-        updateLoopBranchHeight(parentId); // This resizes and redraws the ancestor
-        updateLayout(parentId);         // This repositions the ancestor's *other* children
+        updateLoopBranchHeight(parentId);
+        updateLayout(parentId);
         if (parentId === appState.targetID) {
-            renderDimensionSliders(); // Refresh UI if the ancestor is selected
+            renderDimensionSliders();
         }
         parentId = parentBlock?.parent;
     }
@@ -258,7 +263,6 @@ function editBlock(uuid, updates) {
     }
 
     generateShape(uuid, block.type, block.colors, block.sizes);
-    // Don't call updateLayout here directly; notifyAncestors will handle layouts of other blocks.
     notifyAncestorsOfChange(uuid);
 }
 
@@ -293,6 +297,7 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
 
 function removeBlock(uuid) {
     if (!appState.blockSpace[uuid]) return;
+    const oldParentId = appState.blockSpace[uuid]?.parent;
     handleDetach(uuid);
     const groupToRemove = getDragGroup(uuid, appState.blockSpace, []);
 
@@ -302,6 +307,10 @@ function removeBlock(uuid) {
             document.getElementById(idToRemove)?.remove();
         }
     });
+
+    if (oldParentId) {
+        notifyAncestorsOfChange({ parent: oldParentId });
+    }
 
     if (groupToRemove.includes(appState.targetID)) {
         const remainingKeys = Object.keys(appState.blockSpace);
@@ -333,7 +342,7 @@ function handleDetach(childId) {
     const oldParentId = childBlock.parent;
     setParent(childId, null, null);
     if (oldParentId) {
-        notifyAncestorsOfChange({ parent: oldParentId }); // Start notifications from the old parent
+        notifyAncestorsOfChange({ parent: oldParentId });
     }
 }
 
@@ -345,7 +354,6 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
     const delta = { x: finalTransform.x - startPos.x, y: finalTransform.y - startPos.y };
     const groupToMove = getDragGroup(draggedBlockId, appState.blockSpace, []);
 
-    // Move the entire dragged group to the final position.
     groupToMove.forEach(id => {
         const blockToMove = appState.blockSpace[id];
         const blockElm = document.getElementById(id);
@@ -358,21 +366,18 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
     });
 
     if (snapInfo) {
-        // A snap occurred. The blocks are already in the right final place.
-        // We just need to update the data model and refresh the ancestors.
         if (snapInfo.snapType === 'insertion') {
             const { parentId, originalChildId, parentSnapPoint } = snapInfo;
             const draggedBlockBottomPoint = mainDraggedBlock.snapPoints.find(p => p.role === 'male' && p.name === 'bottom');
             if (draggedBlockBottomPoint) {
                 setParent(originalChildId, draggedBlockId, draggedBlockBottomPoint.name);
                 setParent(draggedBlockId, parentId, parentSnapPoint.name);
-                updateLayout(draggedBlockId); // Position the original child relative to the newly inserted block
+                updateLayout(draggedBlockId);
             }
         } else if (snapInfo.snapType === 'append') {
             setParent(draggedBlockId, snapInfo.parentId, snapInfo.parentSnapPoint.name);
         }
         
-        // After snapping, tell the new parent and its ancestors to update.
         if (snapInfo.parentId) {
             notifyAncestorsOfChange({ parent: snapInfo.parentId });
         }
