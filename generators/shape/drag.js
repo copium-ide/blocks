@@ -12,14 +12,13 @@ function getDragGroup(blockId, allBlocks) {
     return group;
 }
 
-// **UPDATED**: New onDetach callback added
 export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach) {
   const SNAP_RADIUS = 100; // In screen pixels
 
   let isDragging = false;
-  let selectedElement = null; 
-  let dragGroup = []; 
-  let offset = { x: 0, y: 0 }; 
+  let selectedElement = null;
+  let dragGroup = [];
+  let offset = { x: 0, y: 0 };
 
   let snapPointVisualizerGroup = null;
 
@@ -36,8 +35,6 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach) {
     return ctm ? pt.matrixTransform(ctm.inverse()) : { x: 0, y: 0 };
   }
 
-  // ... createSnapVisualizers, updateActiveVisualizers, removeSnapVisualizers are unchanged ...
-
   function createSnapVisualizers() {
     if (snapPointVisualizerGroup) removeSnapVisualizers();
     
@@ -51,214 +48,198 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach) {
 
     for (const blockId in allBlocks) {
       if (dragGroupIds.includes(blockId)) continue;
-
       const blockData = allBlocks[blockId];
       if (!blockData.snapPoints || !blockData.transform) continue;
 
-      blockData.snapPoints.forEach((point, index) => {
-        if (point.role === 'male' && (!blockData.children || !blockData.children[point.name])) {
+      blockData.snapPoints.forEach((point) => {
+        const cx = blockData.transform.x + (point.x * main.APP_SCALE);
+        const cy = blockData.transform.y + (point.y * main.APP_SCALE);
+        
+        // **UPDATED**: Logic for both append and insert visualizers
+        if (point.role === 'male') {
+          const isOccupied = blockData.children && blockData.children[point.name];
+          if (isOccupied) {
+            // Draw an "insert" visualizer
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            const cx = blockData.transform.x + (point.x * main.APP_SCALE);
-            const cy = blockData.transform.y + (point.y * main.APP_SCALE);
+            circle.setAttribute('cx', cx);
+            circle.setAttribute('cy', cy);
+            circle.setAttribute('r', circleRadius * 1.2);
+            circle.setAttribute('fill', 'rgba(0, 255, 0, 0.6)'); // Green for insertion
+            snapPointVisualizerGroup.appendChild(circle);
+          } else {
+            // Draw an "append" visualizer
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             circle.setAttribute('cx', cx);
             circle.setAttribute('cy', cy);
             circle.setAttribute('r', circleRadius);
-            circle.setAttribute('stroke', 'rgba(0,0,0,0.5)');
-            circle.setAttribute('stroke-width', 1 / main.APP_SCALE);
-            circle.dataset.blockId = blockId;
-            circle.dataset.pointIndex = index;
-            circle.setAttribute('fill', 'rgba(255, 255, 0, 0.8)');
+            circle.setAttribute('fill', 'rgba(255, 255, 0, 0.8)'); // Yellow for available
             snapPointVisualizerGroup.appendChild(circle);
+          }
         }
       });
     }
+
+    // Visualize the female point on the dragged block
     const draggedBlockData = allBlocks[selectedElement.id];
-    // **UPDATED**: Only show female snap points if the block is un-parented.
-    // This happens immediately on drag now, so this check works.
     if (draggedBlockData && draggedBlockData.snapPoints && !draggedBlockData.parent) {
-        draggedBlockData.snapPoints.forEach(point => {
-            if (point.role === 'female') {
-                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                circle.setAttribute('r', circleRadius);
-                circle.setAttribute('stroke', 'rgba(0,0,0,0.5)');
-                circle.setAttribute('stroke-width', 1 / main.APP_SCALE);
-                circle.setAttribute('fill', 'rgba(255, 100, 100, 0.8)');
-                circle.dataset.blockId = selectedElement.id;
-                snapPointVisualizerGroup.appendChild(circle);
-            }
-        });
+      draggedBlockData.snapPoints.forEach(point => {
+        if (point.role === 'female') {
+          const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          circle.setAttribute('r', circleRadius);
+          circle.setAttribute('fill', 'rgba(255, 100, 100, 0.8)');
+          circle.dataset.blockId = selectedElement.id;
+          snapPointVisualizerGroup.appendChild(circle);
+        }
+      });
     }
   }
 
   function updateActiveVisualizers(newBlockPos) {
-    if (!snapPointVisualizerGroup || !selectedElement) return;
-    const activeCircles = snapPointVisualizerGroup.querySelectorAll(`[data-block-id="${selectedElement.id}"]`);
-    const blockData = allBlocks[selectedElement.id];
-    if (!blockData || !blockData.snapPoints) return;
-    const femalePoints = blockData.snapPoints.filter(p => p.role === 'female');
-    activeCircles.forEach((circle, index) => {
-      const point = femalePoints[index];
-      if (point) {
-        circle.setAttribute('cx', newBlockPos.x + (point.x * main.APP_SCALE));
-        circle.setAttribute('cy', newBlockPos.y + (point.y * main.APP_SCALE));
-      }
-    });
+      if (!snapPointVisualizerGroup || !selectedElement) return;
+      const activeCircles = snapPointVisualizerGroup.querySelectorAll(`[data-block-id="${selectedElement.id}"]`);
+      const blockData = allBlocks[selectedElement.id];
+      if (!blockData || !blockData.snapPoints) return;
+      const femalePoints = blockData.snapPoints.filter(p => p.role === 'female');
+      activeCircles.forEach((circle, index) => {
+        const point = femalePoints[index];
+        if (point) {
+          circle.setAttribute('cx', newBlockPos.x + (point.x * main.APP_SCALE));
+          circle.setAttribute('cy', newBlockPos.y + (point.y * main.APP_SCALE));
+        }
+      });
   }
 
-   function removeSnapVisualizers() {
+  function removeSnapVisualizers() {
     if (snapPointVisualizerGroup) {
       snapPointVisualizerGroup.remove();
       snapPointVisualizerGroup = null;
     }
   }
 
-
   function checkForSnap(draggedBlockId, currentPos, dragGroupIds) {
     const effectiveSnapRadius = SNAP_RADIUS / main.APP_SCALE;
     const draggedBlockData = allBlocks[draggedBlockId];
     
-    // This check is now robust because the parent is detached on startDrag
     if (!draggedBlockData || !draggedBlockData.snapPoints || draggedBlockData.parent) return null;
 
-    const femaleSnapPoints = draggedBlockData.snapPoints.filter(p => p.role === 'female');
-    if (femaleSnapPoints.length === 0) return null;
+    const draggedFemalePoint = draggedBlockData.snapPoints.find(p => p.role === 'female');
+    if (!draggedFemalePoint) return null;
 
-    let closestSnap = { distance: Infinity, position: null, targetId: null, malePoint: null, femalePoint: null };
+    let closestSnap = { distance: Infinity };
 
-    for (const blockId in allBlocks) {
-      if (dragGroupIds.includes(blockId)) continue;
-      const staticBlockData = allBlocks[blockId];
+    for (const staticBlockId in allBlocks) {
+      if (dragGroupIds.includes(staticBlockId)) continue;
+      const staticBlockData = allBlocks[staticBlockId];
       if (!staticBlockData.snapPoints || !staticBlockData.transform) continue;
 
-      const maleSnapPoints = staticBlockData.snapPoints.filter(p => p.role === 'male');
+      for (const staticMalePoint of staticBlockData.snapPoints.filter(p => p.role === 'male')) {
+        if (draggedFemalePoint.type !== staticMalePoint.type) continue;
+        
+        const targetX = staticBlockData.transform.x + (staticMalePoint.x * main.APP_SCALE) - (draggedFemalePoint.x * main.APP_SCALE);
+        const targetY = staticBlockData.transform.y + (staticMalePoint.y * main.APP_SCALE) - (draggedFemalePoint.y * main.APP_SCALE);
+        const distance = Math.sqrt(Math.pow(currentPos.x - targetX, 2) + Math.pow(currentPos.y - targetY, 2));
 
-      for (const femalePoint of femaleSnapPoints) {
-        for (const malePoint of maleSnapPoints) {
-            if (staticBlockData.children && staticBlockData.children[malePoint.name]) {
-                continue;
-            }
-
-          if (femalePoint.type === malePoint.type) {
-            const targetX = staticBlockData.transform.x + (malePoint.x * main.APP_SCALE) - (femalePoint.x * main.APP_SCALE);
-            const targetY = staticBlockData.transform.y + (malePoint.y * main.APP_SCALE) - (femalePoint.y * main.APP_SCALE);
-            
-            const distance = Math.sqrt(Math.pow(currentPos.x - targetX, 2) + Math.pow(currentPos.y - targetY, 2));
-
-            if (distance < effectiveSnapRadius && distance < closestSnap.distance) {
-              closestSnap = { 
-                distance, 
-                position: { x: targetX, y: targetY },
-                targetId: blockId,
-                malePoint: malePoint,
-                femalePoint: femalePoint
-              };
-            }
+        if (distance < effectiveSnapRadius && distance < closestSnap.distance) {
+          const isOccupied = staticBlockData.children && staticBlockData.children[staticMalePoint.name];
+          if (isOccupied) {
+            // **NEW**: Found an insertion snap point
+            closestSnap = {
+              distance,
+              position: { x: targetX, y: targetY },
+              snapType: 'insertion',
+              parentId: staticBlockId,
+              originalChildId: staticBlockData.children[staticMalePoint.name],
+              parentSnapPoint: staticMalePoint
+            };
+          } else {
+            // Standard append snap point
+            closestSnap = {
+              distance,
+              position: { x: targetX, y: targetY },
+              snapType: 'append',
+              parentId: staticBlockId,
+              parentSnapPoint: staticMalePoint
+            };
           }
         }
       }
     }
-    return closestSnap.targetId ? closestSnap : null;
+    return closestSnap.distance === Infinity ? null : closestSnap;
   }
 
+  // startDrag, drag, and endDrag are largely the same, but pass the new snapInfo
   function startDrag(event) {
     if (event.type === 'mousedown' && event.button !== 0) return;
-
     const target = event.target.closest('svg[blocktype]');
     if (target && svgContainer.contains(target)) {
-      isDragging = true;
-      selectedElement = target;
-      
-      // **NEW**: Immediately detach the block from its parent if it has one.
-      const blockData = allBlocks[selectedElement.id];
-      if (blockData && blockData.parent && onDetach) {
-          onDetach(selectedElement.id);
-      }
-      
-      const mainBlockStartPos = blockData.transform || { x: 0, y: 0 };
-      const dragGroupIds = getDragGroup(selectedElement.id, allBlocks);
-      dragGroup = [];
-      dragGroupIds.forEach(id => {
-          const el = document.getElementById(id);
-          const currentBlockData = allBlocks[id];
-          if (el && currentBlockData?.transform) {
-              svgContainer.appendChild(el);
-              dragGroup.push({
-                  id: id,
-                  el: el,
-                  relativeOffset: {
-                      x: currentBlockData.transform.x - mainBlockStartPos.x,
-                      y: currentBlockData.transform.y - mainBlockStartPos.y
-                  }
-              });
-          }
-      });
-      
-      selectedElement.classList.add('active');
-
-      const startPoint = getSVGCoordinates(event);
-      offset.x = startPoint.x - mainBlockStartPos.x;
-      offset.y = startPoint.y - mainBlockStartPos.y;
-
-      createSnapVisualizers();
-
-      window.addEventListener('mousemove', drag);
-      window.addEventListener('mouseup', endDrag);
-      window.addEventListener('touchmove', drag, { passive: false });
-      window.addEventListener('touchend', endDrag);
-      window.addEventListener('blur', endDrag);
-      if (event.cancelable) event.preventDefault();
+        isDragging = true;
+        selectedElement = target;
+        const blockData = allBlocks[selectedElement.id];
+        if (blockData && blockData.parent && onDetach) {
+            onDetach(selectedElement.id);
+        }
+        const mainBlockStartPos = blockData.transform || { x: 0, y: 0 };
+        const dragGroupIds = getDragGroup(selectedElement.id, allBlocks);
+        dragGroup = [];
+        dragGroupIds.forEach(id => {
+            const el = document.getElementById(id);
+            const currentBlockData = allBlocks[id];
+            if (el && currentBlockData?.transform) {
+                svgContainer.appendChild(el);
+                dragGroup.push({
+                    id: id,
+                    el: el,
+                    relativeOffset: { x: currentBlockData.transform.x - mainBlockStartPos.x, y: currentBlockData.transform.y - mainBlockStartPos.y }
+                });
+            }
+        });
+        selectedElement.classList.add('active');
+        const startPoint = getSVGCoordinates(event);
+        offset.x = startPoint.x - mainBlockStartPos.x;
+        offset.y = startPoint.y - mainBlockStartPos.y;
+        createSnapVisualizers();
+        window.addEventListener('mousemove', drag);
+        window.addEventListener('mouseup', endDrag);
+        window.addEventListener('touchmove', drag, { passive: false });
+        window.addEventListener('touchend', endDrag);
+        window.addEventListener('blur', endDrag);
+        if (event.cancelable) event.preventDefault();
     }
   }
 
-  // drag and endDrag functions are unchanged from the previous version
   function drag(event) {
     if (!isDragging || !selectedElement) return;
     if (event.cancelable) event.preventDefault();
-    
     const coord = getSVGCoordinates(event);
     const mouseDrivenPos = { x: coord.x - offset.x, y: coord.y - offset.y };
-    
     const dragGroupIds = dragGroup.map(item => item.id);
     const snapInfo = checkForSnap(selectedElement.id, mouseDrivenPos, dragGroupIds);
     const finalPos = snapInfo ? snapInfo.position : mouseDrivenPos;
-    
     dragGroup.forEach(item => {
-        const newPos = {
-            x: finalPos.x + item.relativeOffset.x,
-            y: finalPos.y + item.relativeOffset.y
-        };
+        const newPos = { x: finalPos.x + item.relativeOffset.x, y: finalPos.y + item.relativeOffset.y };
         item.el.setAttribute('x', newPos.x);
         item.el.setAttribute('y', newPos.y);
     });
-
     updateActiveVisualizers(finalPos);
   }
 
   function endDrag() {
     if (!isDragging) return;
-
     removeSnapVisualizers();
-
     window.removeEventListener('mousemove', drag);
     window.removeEventListener('mouseup', endDrag);
     window.removeEventListener('touchmove', drag);
     window.removeEventListener('touchend', endDrag);
     window.removeEventListener('blur', endDrag);
-    
     if (selectedElement) {
       if (onDragEnd) {
-        const finalTransform = {
-            x: selectedElement.x.baseVal.value,
-            y: selectedElement.y.baseVal.value
-        };
-        
+        const finalTransform = { x: selectedElement.x.baseVal.value, y: selectedElement.y.baseVal.value };
         const dragGroupIds = dragGroup.map(item => item.id);
         const snapInfo = checkForSnap(selectedElement.id, finalTransform, dragGroupIds);
         onDragEnd(selectedElement.id, finalTransform, snapInfo);
       }
       selectedElement.classList.remove('active');
     }
-
     isDragging = false;
     selectedElement = null;
     dragGroup = [];
