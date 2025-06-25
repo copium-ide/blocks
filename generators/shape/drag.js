@@ -13,6 +13,8 @@ function getDragGroup(blockId, allBlocks) {
 
 export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach) {
     const SNAP_RADIUS = 100;
+    // A larger radius to "break" a snap, preventing flickering.
+    const UNSNAP_RADIUS = 120; 
 
     // --- Drag State ---
     let isDragging = false;
@@ -53,8 +55,6 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach) {
         selectedElement = target;
 
         const blockData = allBlocks[selectedElement.id];
-        // Detach the block from its parent at the start of the drag.
-        // This triggers a render and makes the block "free".
         if (blockData && blockData.parent && onDetach) {
             onDetach(selectedElement.id);
         }
@@ -103,63 +103,65 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach) {
         const mouseDrivenPos = { x: coord.x - offset.x, y: coord.y - offset.y };
         const dragGroupIds = dragGroup.map(item => item.id);
 
-        const newSnapInfo = checkForSnap(selectedElement.id, mouseDrivenPos, dragGroupIds);
+        // --- REFACTORED SNAP/UNSNAP LOGIC ---
 
-        const isSameSnapTarget = newSnapInfo && currentSnapTarget &&
-            newSnapInfo.parentId === currentSnapTarget.parentId &&
-            newSnapInfo.parentSnapPoint.name === currentSnapTarget.parentSnapPoint.name;
+        // STATE 1: We are currently snapped. Check if we should unsnap.
+        if (currentSnapTarget) {
+            // Calculate the distance from the mouse to the block's *actual snapped position*.
+            const snappedPosition = currentSnapTarget.position;
+            const distance = Math.sqrt(Math.pow(mouseDrivenPos.x - snappedPosition.x, 2) + Math.pow(mouseDrivenPos.y - snappedPosition.y, 2));
 
-        // If snap state has changed, update the application state.
-        if (!isSameSnapTarget) {
-            // If we were snapped to something, we must first detach from it.
-            // onDetach will set the block's parent to null and trigger a re-render.
-            if (currentSnapTarget) {
+            // If the mouse has been dragged far enough away, break the snap.
+            if (distance > UNSNAP_RADIUS) {
                 onDetach(selectedElement.id);
-            }
-
-            currentSnapTarget = newSnapInfo;
-
-            // If we found a new snap point, commit the snap immediately.
-            // onDragEnd handles the parenting logic and triggers a re-render.
-            if (currentSnapTarget) {
-                // The transform passed here is irrelevant because the layout will be
-                // recalculated based on the new parent during the render.
-                onDragEnd(selectedElement.id, { x: 0, y: 0 }, currentSnapTarget);
+                currentSnapTarget = null; 
+                // By setting currentSnapTarget to null, the logic will fall through
+                // to the "free-floating" state below in the same frame.
             }
         }
 
-        // If we are not snapped to anything, just move the block with the cursor.
-        // This updates the model's transform directly and moves the SVG element
-        // for performance, avoiding a full re-render on every mouse movement.
+        // STATE 2: We are free-floating. Check if we should snap to something.
         if (!currentSnapTarget) {
-            const mainBlock = allBlocks[selectedElement.id];
-            if (mainBlock) {
-                // Update the model's state directly
-                mainBlock.transform.x = mouseDrivenPos.x;
-                mainBlock.transform.y = mouseDrivenPos.y;
-                
-                // Manually update the visuals of the entire drag group
-                dragGroup.forEach(item => {
-                    const blockData = allBlocks[item.id];
-                    const newX = mainBlock.transform.x + item.relativeOffset.x;
-                    const newY = mainBlock.transform.y + item.relativeOffset.y;
-                    if (blockData) {
-                        blockData.transform.x = newX;
-                        blockData.transform.y = newY;
-                    }
-                    item.el.setAttribute('x', newX);
-                    item.el.setAttribute('y', newY);
-                });
+            const newSnapInfo = checkForSnap(selectedElement.id, mouseDrivenPos, dragGroupIds);
+
+            if (newSnapInfo) {
+                // A new snap has been found. Commit it.
+                currentSnapTarget = newSnapInfo;
+                // onDragEnd will handle parenting and trigger a full re-render,
+                // which correctly places the block and its children.
+                onDragEnd(selectedElement.id, newSnapInfo.position, currentSnapTarget);
+            } else {
+                // No snap found, so just move the block with the mouse.
+                // This updates the model's transform directly and moves the SVG element
+                // for performance, avoiding a full re-render on every mouse movement.
+                const mainBlock = allBlocks[selectedElement.id];
+                if (mainBlock) {
+                    mainBlock.transform.x = mouseDrivenPos.x;
+                    mainBlock.transform.y = mouseDrivenPos.y;
+                    
+                    dragGroup.forEach(item => {
+                        const blockData = allBlocks[item.id];
+                        const newX = mainBlock.transform.x + item.relativeOffset.x;
+                        const newY = mainBlock.transform.y + item.relativeOffset.y;
+                        if (blockData) {
+                            blockData.transform.x = newX;
+                            blockData.transform.y = newY;
+                        }
+                        item.el.setAttribute('x', newX);
+                        item.el.setAttribute('y', newY);
+                    });
+                }
             }
         }
         
+        // The visualizers should always follow the mouse, not the snapped position.
         updateActiveVisualizers(mouseDrivenPos);
     }
 
     function endDrag() {
         if (!isDragging) return;
 
-        // The state has already been updated live during the drag.
+        // The final state (snapped or not) is already set by the `drag` function.
         // We just need to clean up the drag-specific visuals and listeners.
         removeSnapVisualizers();
 
@@ -182,8 +184,10 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach) {
     // --- Utility and Visualizer Functions (Unchanged) ---
 
     function checkForSnap(draggedBlockId, currentPos, dragGroupIds) {
+        // Use the smaller SNAP_RADIUS for initiating a snap
         const effectiveSnapRadius = SNAP_RADIUS / main.APP_SCALE;
         const draggedBlockData = allBlocks[draggedBlockId];
+        // This check is now correct: we only check for snaps on un-parented blocks.
         if (!draggedBlockData || !draggedBlockData.snapPoints || draggedBlockData.parent) return null;
 
         const draggedFemalePoint = draggedBlockData.snapPoints.find(p => p.role === 'female');
