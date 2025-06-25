@@ -89,8 +89,8 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
                         const originalTransform = allBlocks[blockId].transform;
                         if (blockEl) {
                             // The delta is now calculated entirely by main.js
-                            blockEl.setAttribute('x', originalTransform.x*main.APP_SCALE);
-                            blockEl.setAttribute('y', (originalTransform.y + displacement.deltaY)*main.APP_SCALE);
+                            blockEl.setAttribute('x', originalTransform.x);
+                            blockEl.setAttribute('y', originalTransform.y + displacement.deltaY);
                         }
                     });
                 });
