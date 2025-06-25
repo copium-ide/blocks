@@ -25,14 +25,13 @@ function getElements() {
 }
 const dom = getElements();
 
-// --- Application State ---
+// --- Application State (Single Source of Truth) ---
 const appState = {
     blockSpace: {},
     targetID: null,
 };
 
 // --- Utility Functions ---
-
 function clearNode(node) {
     if (!node) return;
     while (node.firstChild) {
@@ -57,27 +56,12 @@ function getDragGroup(blockId, allBlocks, group = []) {
     return group;
 }
 
-// --- Block Data & Rendering Logic ---
-
-function generateShape(uuid, type, colors, sizes) {
-    const shapeData = blocks.Block(type, colors, sizes);
-    const blockElm = document.getElementById(uuid);
-    if (blockElm) {
-        svg.generate(blockElm, shapeData, APP_SCALE);
-    }
-}
-
-
-// --- Core Sizing, Layout, and Refresh Logic ---
+// --- Layout Calculation Logic (Reads from state) ---
 
 function getBlockVisualHeight(blockId) {
     const block = appState.blockSpace[blockId];
     if (!block) return 0;
-    let height = 0;
-    block.sizes.forEach(branch => {
-        height += branch.height;
-    });
-    return height;
+    return block.sizes.reduce((sum, branch) => sum + branch.height, 0);
 }
 
 function calculateChainHeight(startBlockId) {
@@ -92,64 +76,188 @@ function calculateChainHeight(startBlockId) {
     return totalHeight;
 }
 
-function updateLoopBranchHeight(loopBlockId, previewContext = null) {
-    const loopBlock = appState.blockSpace[loopBlockId];
-    if (!loopBlock || !loopBlock.sizes?.some(s => s.loop)) {
+/**
+ * Recalculates all derived data (positions, loop heights) based on the current state.
+ * This function reads from appState and writes back to it, preparing it for rendering.
+ * It replaces the old `updateLayout` and `notifyAncestorsOfChange` logic.
+ */
+function recalculateAllLayouts() {
+    const topLevelBlocks = Object.values(appState.blockSpace).filter(b => !b.parent);
+
+    function updateChain(blockId) {
+        const block = appState.blockSpace[blockId];
+        if (!block) return;
+
+        // 1. Update this block's loop height if it's a loop block
+        if (block.sizes?.some(s => s.loop)) {
+            const newSizes = block.sizes.map(s => ({ ...s }));
+            let needsSnapPointUpdate = false;
+            for (let i = 0; i < newSizes.length; i++) {
+                const branch = newSizes[i];
+                if (branch.loop) {
+                    const innerChainStartId = block.children['topInner' + i];
+                    const newLoopHeight = calculateChainHeight(innerChainStartId) || MIN_LOOP_HEIGHT;
+                    if (branch.loop.height !== newLoopHeight) {
+                        branch.loop.height = newLoopHeight;
+                        needsSnapPointUpdate = true;
+                    }
+                }
+            }
+            if (needsSnapPointUpdate) {
+                block.sizes = newSizes;
+                block.snapPoints = blocks.Block(block.type, block.colors, block.sizes).snapPoints;
+            }
+        }
+
+        // 2. Update positions of all direct children based on this block's final position
+        for (const snapPointName in block.children) {
+            const childId = block.children[snapPointName];
+            const childBlock = appState.blockSpace[childId];
+            if (!childBlock) continue;
+
+            const parentMalePoint = block.snapPoints.find(p => p.name === snapPointName);
+            const childFemalePoint = childBlock.snapPoints.find(p => p.role === 'female');
+            if (!parentMalePoint || !childFemalePoint) continue;
+
+            childBlock.transform.x = block.transform.x + (parentMalePoint.x * APP_SCALE) - (childFemalePoint.x * APP_SCALE);
+            childBlock.transform.y = block.transform.y + (parentMalePoint.y * APP_SCALE) - (childFemalePoint.y * APP_SCALE);
+
+            // 3. Recurse to the next block in the chain
+            updateChain(childId);
+        }
+    }
+
+    // Start the process for all top-level blocks
+    topLevelBlocks.forEach(block => updateChain(block.uuid));
+}
+
+
+// --- Rendering Logic (Reads from state, writes to DOM) ---
+
+/**
+ * The main render function. It orchestrates all DOM updates based on the appState.
+ * This should be the ONLY function that initiates DOM changes.
+ */
+function render() {
+    // 1. Calculate all derived values and update the state object.
+    recalculateAllLayouts();
+
+    // 2. Render all parts of the UI based on the finalized state.
+    renderBlocks();
+    renderDimensionSliders();
+    populateSelector();
+}
+
+function generateShape(uuid, type, colors, sizes) {
+    const shapeData = blocks.Block(type, colors, sizes);
+    const blockElm = document.getElementById(uuid);
+    if (blockElm) {
+        svg.generate(blockElm, shapeData, APP_SCALE);
+    }
+}
+
+function renderBlocks() {
+    const existingBlockIds = new Set(Array.from(dom.workSpace.querySelectorAll('svg[blocktype]')).map(el => el.id));
+    const stateBlockIds = new Set(Object.keys(appState.blockSpace));
+
+    // Remove blocks from DOM that are no longer in the state
+    for (const id of existingBlockIds) {
+        if (!stateBlockIds.has(id)) {
+            document.getElementById(id)?.remove();
+        }
+    }
+
+    // Add/Update blocks based on the state
+    for (const id of stateBlockIds) {
+        const blockData = appState.blockSpace[id];
+        let blockElm = document.getElementById(id);
+
+        if (!blockElm) {
+            blockElm = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
+            blockElm.id = id;
+            blockElm.setAttribute("blocktype", blockData.type);
+            dom.workSpace.appendChild(blockElm);
+        }
+
+        blockElm.setAttribute('x', blockData.transform.x);
+        blockElm.setAttribute('y', blockData.transform.y);
+        generateShape(id, blockData.type, blockData.colors, blockData.sizes);
+    }
+}
+
+function populateSelector() {
+    if (!dom.uuidinput) return;
+    const currentVal = dom.uuidinput.value;
+    clearNode(dom.uuidinput);
+
+    for (const key in appState.blockSpace) {
+        const option = document.createElement('option');
+        option.value = key;
+        option.textContent = `${appState.blockSpace[key].type} (${key.substring(0, 8)})`;
+        dom.uuidinput.appendChild(option);
+    }
+    dom.uuidinput.value = appState.blockSpace[currentVal] ? currentVal : (appState.targetID || '');
+}
+
+function renderDimensionSliders() {
+    if (!dom.slidersContainer) return;
+    clearNode(dom.slidersContainer);
+    const currentBlock = appState.blockSpace[appState.targetID];
+    if (!currentBlock) {
+        if (dom.mainSliders) dom.mainSliders.style.display = 'none';
+        if (dom.addBranchBtn) dom.addBranchBtn.style.display = 'none';
         return;
     }
 
-    let needsRedraw = false;
-    const newSizes = loopBlock.sizes.map(s => ({ ...s, loop: s.loop ? { ...s.loop } : undefined }));
+    const { type, sizes } = currentBlock;
+    const isBranchBlock = ['block', 'hat', 'end'].includes(type);
 
-    for (let i = 0; i < newSizes.length; i++) {
-        const branch = newSizes[i];
+    if (dom.mainSliders) dom.mainSliders.style.display = isBranchBlock ? 'block' : 'none';
+    if (dom.addBranchBtn) dom.addBranchBtn.style.display = isBranchBlock ? 'block' : 'none';
+
+    sizes.forEach((branch, index) => {
+        const branchDiv = document.createElement("div");
+        branchDiv.className = "branch-slider";
+
+        const header = document.createElement('h4');
+        header.textContent = isBranchBlock ? `Branch ${index + 1}` : 'Dimensions';
+        branchDiv.appendChild(header);
+
+        if (isBranchBlock && sizes.length > 1) {
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-branch';
+            removeBtn.title = 'Remove Branch';
+            removeBtn.textContent = 'X';
+            removeBtn.dataset.index = index;
+            header.appendChild(removeBtn);
+        }
+
+        const createSlider = (labelText, prop, min, max, step, value) => {
+            const label = document.createElement('label');
+            label.textContent = `${labelText}: `;
+            const input = document.createElement('input');
+            input.type = 'range';
+            input.min = min; input.max = max; input.step = step; input.value = value;
+            input.dataset.index = index; input.dataset.prop = prop;
+            input.className = 'branch-input';
+            label.appendChild(input);
+            return label;
+        };
+
+        branchDiv.appendChild(createSlider('Height', 'height', 0.5, 10, 0.1, branch.height));
+        branchDiv.appendChild(createSlider('Width', 'width', 0.5, 10, 0.1, branch.width));
+
         if (branch.loop) {
-            let newLoopHeight;
-            const innerChainStartId = loopBlock.children['topInner' + i];
-
-            if (innerChainStartId) {
-                newLoopHeight = calculateChainHeight(innerChainStartId);
-            } else {
-                newLoopHeight = MIN_LOOP_HEIGHT;
-            }
-
-            if (previewContext && previewContext.snapPointName === 'topInner' + i) {
-                newLoopHeight = (newLoopHeight === MIN_LOOP_HEIGHT ? 0 : newLoopHeight);
-                newLoopHeight += calculateChainHeight(previewContext.draggedBlockId);
-            }
-            
-            if (branch.loop.height !== newLoopHeight) {
-                branch.loop.height = newLoopHeight;
-                needsRedraw = true;
-            }
+            const loopLabel = document.createElement('label');
+            loopLabel.textContent = `Loop Height: ${branch.loop.height.toFixed(1)} (auto)`;
+            branchDiv.appendChild(loopLabel);
         }
-    }
-
-    if (needsRedraw) {
-        if (previewContext) {
-            generateShape(loopBlockId, loopBlock.type, loopBlock.colors, newSizes);
-        } else {
-            editBlock(loopBlockId, { sizes: newSizes });
-        }
-    }
+        dom.slidersContainer.appendChild(branchDiv);
+    });
 }
 
-function notifyAncestorsOfChange(startBlockId) {
-    let currentId = startBlockId;
-    while (currentId) {
-        const currentBlock = appState.blockSpace[currentId];
-        if (!currentBlock) break; // Safety check
 
-        updateLoopBranchHeight(currentId);
-        updateLayout(currentId);
-
-        if (currentId === appState.targetID) {
-            renderDimensionSliders();
-        }
-        currentId = currentBlock.parent;
-    }
-}
-
+// --- Core Application Logic / "Actions" (Modify state, then call render) ---
 
 function setParent(childId, newParentId, parentSnapPointName) {
     const childBlock = appState.blockSpace[childId];
@@ -172,186 +280,92 @@ function setParent(childId, newParentId, parentSnapPointName) {
     }
 }
 
-function updateLayout(startBlockId) {
-    const parentBlock = appState.blockSpace[startBlockId];
-    if (!parentBlock || !parentBlock.children) return;
-
-    for (const snapPointName in parentBlock.children) {
-        const childId = parentBlock.children[snapPointName];
-        const childBlock = appState.blockSpace[childId];
-        if (!childBlock) continue;
-
-        const parentMalePoint = parentBlock.snapPoints.find(p => p.name === snapPointName);
-        const childFemalePoint = childBlock.snapPoints.find(p => p.role === 'female');
-        if (!parentMalePoint || !childFemalePoint) continue;
-
-        const newX = parentBlock.transform.x + (parentMalePoint.x * APP_SCALE) - (childFemalePoint.x * APP_SCALE);
-        const newY = parentBlock.transform.y + (parentMalePoint.y * APP_SCALE) - (childFemalePoint.y * APP_SCALE);
-        
-        const groupToMove = getDragGroup(childId, appState.blockSpace, []);
-        const deltaX = newX - childBlock.transform.x;
-        const deltaY = newY - childBlock.transform.y;
-        
-        groupToMove.forEach(id => {
-            const blockToMove = appState.blockSpace[id];
-            const blockElm = document.getElementById(id);
-            if (blockToMove && blockElm) {
-                blockToMove.transform.x += deltaX;
-                blockToMove.transform.y += deltaY;
-                blockElm.setAttribute('x', blockToMove.transform.x);
-                blockElm.setAttribute('y', blockToMove.transform.y);
-            }
-        });
-    }
-}
-
-
-// --- UI Update Functions ---
-
-function populateSelector() {
-    if (!dom.uuidinput) return;
-    const currentVal = dom.uuidinput.value;
-    clearNode(dom.uuidinput);
-
-    for (const key in appState.blockSpace) {
-        const option = document.createElement('option');
-        option.value = key;
-        option.textContent = `${appState.blockSpace[key].type} (${key.substring(0, 8)})`;
-        dom.uuidinput.appendChild(option);
-    }
-    dom.uuidinput.value = appState.blockSpace[currentVal] ? currentVal : (Object.keys(appState.blockSpace)[0] || '');
-}
-
-function renderDimensionSliders() {
-    if (!dom.slidersContainer) return;
-    clearNode(dom.slidersContainer);
-    if (!appState.targetID || !appState.blockSpace[appState.targetID]) return;
-
-    const currentBlock = appState.blockSpace[appState.targetID];
-    const { type, sizes } = currentBlock;
-    const isBranchBlock = ['block', 'hat', 'end'].includes(type);
-    
-    if (dom.mainSliders) dom.mainSliders.style.display = isBranchBlock ? 'block' : 'none';
-    if (dom.addBranchBtn) dom.addBranchBtn.style.display = isBranchBlock ? 'block' : 'none';
-
-    sizes.forEach((branch, index) => {
-        const branchDiv = document.createElement("div");
-        branchDiv.className = "branch-slider";
-        
-        let headerHTML = `<h4>${isBranchBlock ? `Branch ${index + 1}` : 'Dimensions'}</h4>`;
-        if (isBranchBlock && sizes.length > 1) {
-            headerHTML += `<button class="remove-branch" data-index="${index}" title="Remove Branch">X</button>`;
-        }
-
-        branchDiv.innerHTML = headerHTML + `
-            <label>Height: <input type="range" min="0.5" max="10" step="0.1" value="${branch.height}" data-index="${index}" data-prop="height" class="branch-input"></label>
-            <label>Width: <input type="range" min="0.5" max="10" step="0.1" value="${branch.width}" data-index="${index}" data-prop="width" class="branch-input"></label>`;
-        
-        if (branch.loop) {
-            branchDiv.innerHTML += `<label>Loop Height: ${branch.loop.height.toFixed(1)} (auto)</label>`;
-        }
-        dom.slidersContainer.appendChild(branchDiv);
-    });
-}
-
-// --- Core Application Logic / "Actions" ---
-
 function editBlock(uuid, updates) {
     const block = appState.blockSpace[uuid];
     if (!block) return;
 
     Object.assign(block, updates);
-    
     if (updates.sizes || updates.type) {
         block.snapPoints = blocks.Block(block.type, block.colors, block.sizes).snapPoints;
     }
-
-    generateShape(uuid, block.type, block.colors, block.sizes);
-    notifyAncestorsOfChange(uuid);
+    render();
 }
 
 function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
     let uuid;
     do { uuid = crypto.randomUUID(); } while (appState.blockSpace.hasOwnProperty(uuid));
-    
+
     const sizes = [{ height: 1, width: 1, loop: { height: MIN_LOOP_HEIGHT } }];
     const blockData = blocks.Block(type, colors, sizes);
 
-    const block = {
-        type: type, uuid: uuid, colors: colors, sizes: sizes, snapPoints: blockData.snapPoints,
-        transform: { x: 420, y: 50 }, parent: null, children: {}
+    appState.blockSpace[uuid] = {
+        type, uuid, colors, sizes,
+        snapPoints: blockData.snapPoints,
+        transform: { x: 420, y: 50 },
+        parent: null,
+        children: {}
     };
-    appState.blockSpace[uuid] = block;
-
-    const blockELM = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
-    blockELM.id = uuid;
-    blockELM.setAttribute("blocktype", type);
-    blockELM.setAttribute('x', block.transform.x);
-    blockELM.setAttribute('y', block.transform.y);
-    dom.workSpace.appendChild(blockELM);
-
-    generateShape(uuid, type, colors, sizes);
-    
     appState.targetID = uuid;
-    populateSelector();
-    renderDimensionSliders();
-    
-    return block;
+    render();
 }
 
 function removeBlock(uuid) {
     if (!appState.blockSpace[uuid]) return;
-    const oldParentId = appState.blockSpace[uuid]?.parent;
-    handleDetach(uuid);
+    handleDetach(uuid, false); // Detach without re-rendering yet
     const groupToRemove = getDragGroup(uuid, appState.blockSpace, []);
 
-    groupToRemove.forEach(idToRemove => {
-        if (appState.blockSpace[idToRemove]) {
-            delete appState.blockSpace[idToRemove];
-            document.getElementById(idToRemove)?.remove();
-        }
-    });
-
-    if (oldParentId) {
-        notifyAncestorsOfChange(oldParentId);
-    }
+    groupToRemove.forEach(id => delete appState.blockSpace[id]);
 
     if (groupToRemove.includes(appState.targetID)) {
         const remainingKeys = Object.keys(appState.blockSpace);
         appState.targetID = remainingKeys.length > 0 ? remainingKeys[0] : null;
     }
-    
-    populateSelector();
-    renderDimensionSliders();
+    render();
 }
 
 // --- Drag and Drop Handlers ---
 
 function onSnapPreview(snapInfo, draggedBlockId) {
-    if (snapInfo.parentId) {
-        const previewContext = { draggedBlockId, snapPointName: snapInfo.parentSnapPoint.name };
-        updateLoopBranchHeight(snapInfo.parentId, previewContext);
+    if (!snapInfo.parentId) return;
+    const parentBlock = appState.blockSpace[snapInfo.parentId];
+    if (!parentBlock || !parentBlock.sizes?.some(s => s.loop)) return;
+
+    // Create a temporary, modified sizes array for preview
+    const previewSizes = JSON.parse(JSON.stringify(parentBlock.sizes));
+    let loopBranch = null;
+    for (let i = 0; i < previewSizes.length; i++) {
+        if ('topInner' + i === snapInfo.parentSnapPoint.name) {
+            loopBranch = previewSizes[i];
+            break;
+        }
+    }
+
+    if (loopBranch) {
+        let previewHeight = calculateChainHeight(parentBlock.children[snapInfo.parentSnapPoint.name]);
+        previewHeight = (previewHeight === MIN_LOOP_HEIGHT ? 0 : previewHeight);
+        previewHeight += calculateChainHeight(draggedBlockId);
+        loopBranch.loop.height = previewHeight;
+        // Directly call generateShape for a temporary visual update without changing state
+        generateShape(snapInfo.parentId, parentBlock.type, parentBlock.colors, previewSizes);
     }
 }
 
 function onSnapPreviewEnd(snapInfo) {
     if (snapInfo.parentId) {
-        // This will now be called whenever a snap preview ends (e.g., a block is
-        // dragged away from a snap point), correctly recalculating the parent's
-        // height based on its actual children.
-        // Passing `null` as the context ensures we are not in preview mode
-        // and that the block's data model is updated via editBlock.
-        updateLoopBranchHeight(snapInfo.parentId, null);
+        // Re-render the parent block using its actual state data to remove the preview
+        const parentBlock = appState.blockSpace[snapInfo.parentId];
+        if (parentBlock) {
+            generateShape(snapInfo.parentId, parentBlock.type, parentBlock.colors, parentBlock.sizes);
+        }
     }
 }
 
-function handleDetach(childId) {
+function handleDetach(childId, shouldRender = true) {
     const childBlock = appState.blockSpace[childId];
-    if (!childBlock) return;
-    const oldParentId = childBlock.parent;
+    if (!childBlock || !childBlock.parent) return;
     setParent(childId, null, null);
-    if (oldParentId) {
-        notifyAncestorsOfChange(oldParentId);
+    if (shouldRender) {
+        render();
     }
 }
 
@@ -359,20 +373,9 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
     const mainDraggedBlock = appState.blockSpace[draggedBlockId];
     if (!mainDraggedBlock) return;
 
-    const startPos = { ...mainDraggedBlock.transform };
-    const delta = { x: finalTransform.x - startPos.x, y: finalTransform.y - startPos.y };
-    const groupToMove = getDragGroup(draggedBlockId, appState.blockSpace, []);
-
-    groupToMove.forEach(id => {
-        const blockToMove = appState.blockSpace[id];
-        const blockElm = document.getElementById(id);
-        if (blockToMove && blockElm) {
-            blockToMove.transform.x += delta.x;
-            blockToMove.transform.y += delta.y;
-            blockElm.setAttribute('x', blockToMove.transform.x);
-            blockElm.setAttribute('y', blockToMove.transform.y);
-        }
-    });
+    // Update the position of the dragged block in the state.
+    mainDraggedBlock.transform.x = finalTransform.x;
+    mainDraggedBlock.transform.y = finalTransform.y;
 
     if (snapInfo) {
         if (snapInfo.snapType === 'insertion') {
@@ -381,18 +384,14 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
             if (draggedBlockBottomPoint) {
                 setParent(originalChildId, draggedBlockId, draggedBlockBottomPoint.name);
                 setParent(draggedBlockId, parentId, parentSnapPoint.name);
-                updateLayout(draggedBlockId);
             }
         } else if (snapInfo.snapType === 'append') {
             setParent(draggedBlockId, snapInfo.parentId, snapInfo.parentSnapPoint.name);
         }
-        
-        if (snapInfo.parentId) {
-            notifyAncestorsOfChange(snapInfo.parentId);
-        }
     }
+    // A single render call will update all positions and visuals correctly.
+    render();
 }
-
 
 // --- Event Listener Setup ---
 
@@ -403,8 +402,8 @@ function setupEventListeners() {
         dom.slidersContainer.addEventListener('input', (event) => {
             if (!event.target.matches('.branch-input') || !appState.targetID) return;
             const block = appState.blockSpace[appState.targetID];
-            const idx = parseInt(event.target.getAttribute("data-index"));
-            const prop = event.target.getAttribute("data-prop");
+            const idx = parseInt(event.target.dataset.index);
+            const prop = event.target.dataset.prop;
             const value = parseFloat(event.target.value);
             const newSizes = JSON.parse(JSON.stringify(block.sizes));
             newSizes[idx][prop] = value;
@@ -413,16 +412,15 @@ function setupEventListeners() {
 
         dom.slidersContainer.addEventListener('click', (event) => {
             if (!event.target.matches('.remove-branch') || !appState.targetID) return;
-            const idx = parseInt(event.target.getAttribute("data-index"));
+            const idx = parseInt(event.target.dataset.index);
             const block = appState.blockSpace[appState.targetID];
             if (block.sizes.length > 1) {
                 const newSizes = block.sizes.filter((_, index) => index !== idx);
                 editBlock(appState.targetID, { sizes: newSizes });
-                renderDimensionSliders();
             }
         });
     }
-    
+
     const controls = [dom.color1input, dom.color2input, dom.typeinput];
     controls.forEach(input => {
         if (!input) return;
@@ -433,7 +431,6 @@ function setupEventListeners() {
             if (input === dom.typeinput) updates.type = dom.typeinput.value;
             else if (input === dom.color1input || input === dom.color2input) updates.colors = { inner: dom.color1input.value, outer: dom.color2input.value };
             editBlock(appState.targetID, updates);
-            if (updates.type) renderDimensionSliders();
         });
     });
 
@@ -446,17 +443,16 @@ function setupEventListeners() {
                 dom.color1input.value = block.colors.inner;
                 dom.color2input.value = block.colors.outer;
             }
-            renderDimensionSliders();
+            render(); // Re-render sliders for the new target
         });
     }
-    
+
     if (dom.addBranchBtn) {
         dom.addBranchBtn.addEventListener('click', () => {
             if (!appState.targetID) return;
             const block = appState.blockSpace[appState.targetID];
             const newSizes = [...block.sizes, { height: 1, width: 1, loop: { height: MIN_LOOP_HEIGHT } }];
             editBlock(appState.targetID, { sizes: newSizes });
-            renderDimensionSliders();
         });
     }
 
@@ -474,9 +470,9 @@ function main() {
 
     setupWorkspaceViewBox();
     setupEventListeners();
-    
     drag.makeDraggable(dom.workSpace, appState.blockSpace, onDragEnd, handleDetach, onSnapPreview, onSnapPreviewEnd);
 
+    // Create the first block, which will trigger the initial render.
     createBlock("hat");
 }
 
