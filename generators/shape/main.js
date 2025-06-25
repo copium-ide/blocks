@@ -332,17 +332,24 @@ function removeBlock(uuid) {
 function onSnapPreview(snapInfo, draggedBlockId) {
     if (!snapInfo.parentId) return null;
 
-    const displacedBlocks = [];
+    // Use a map to accumulate displacements for each block. This correctly handles
+    // cases where a block is affected by multiple movements (e.g., insertion and loop expansion).
+    const displacements = {};
+    const addDisplacement = (blockId, deltaY) => {
+        if (!blockId) return;
+        displacements[blockId] = (displacements[blockId] || 0) + deltaY;
+    };
+
     const draggedChainHeight = calculateChainHeight(draggedBlockId);
 
-    // Handle insertion displacement, regardless of whether it's in a loop or not.
-    // This makes the logic universal.
+    // 1. Handle displacement from insertion.
+    // The block being pushed down moves by the full height of the dragged chain.
     if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
         const insertionDeltaY = draggedChainHeight * APP_SCALE;
-        displacedBlocks.push({ id: snapInfo.originalChildId, deltaY: insertionDeltaY });
+        addDisplacement(snapInfo.originalChildId, insertionDeltaY);
     }
 
-    // Now, specifically check for loop expansion.
+    // 2. Handle displacement from loop expansion.
     let loopBlock = null;
     let innerSnapName = null;
 
@@ -374,21 +381,23 @@ function onSnapPreview(snapInfo, draggedBlockId) {
 
                 const loopExpansionDeltaY = (newLoopHeight - oldLoopHeight) * APP_SCALE;
 
-                if (loopBlock.children.bottom) {
-                    displacedBlocks.push({ id: loopBlock.children.bottom, deltaY: loopExpansionDeltaY });
-                }
+                // Displace the block at the bottom of the loop
+                addDisplacement(loopBlock.children.bottom, loopExpansionDeltaY);
+
+                // Displace blocks in other branches
                 loopBlock.sizes.forEach((_, i) => {
                     if (i === branchIndex) return;
                     const otherBranchSnapName = 'topInner' + i;
-                    if (loopBlock.children[otherBranchSnapName]) {
-                        displacedBlocks.push({ id: loopBlock.children[otherBranchSnapName], deltaY: loopExpansionDeltaY });
-                    }
+                    addDisplacement(loopBlock.children[otherBranchSnapName], loopExpansionDeltaY);
                 });
             }
         }
     }
 
-    return displacedBlocks.length > 0 ? { displacedBlocks } : null;
+    // 3. Convert the displacement map to the array format expected by draggable.js
+    const finalDisplacements = Object.entries(displacements).map(([id, deltaY]) => ({ id, deltaY }));
+
+    return finalDisplacements.length > 0 ? { displacedBlocks: finalDisplacements } : null;
 }
 
 function onSnapPreviewEnd(snapInfo) {
