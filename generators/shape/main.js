@@ -398,18 +398,70 @@ function onSnapPreview(snapInfo, draggedBlockId) {
     return finalDisplacements.length > 0 ? { displacedBlocks: finalDisplacements } : null;
 }
 
-function onSnapPreviewEnd(snapInfo) {
-    if (snapInfo.parentId) {
-        const directParent = appState.blockSpace[snapInfo.parentId];
-        if (directParent) {
-             generateShape(directParent.uuid, directParent.type, directParent.colors, directParent.sizes);
+function onSnapPreview(snapInfo, draggedBlockId) {
+    if (!snapInfo.parentId) return null;
+
+    const displacements = {};
+    const addDisplacement = (blockId, deltaY) => {
+        if (!blockId) return;
+        displacements[blockId] = (displacements[blockId] || 0) + deltaY;
+    };
+
+    const draggedChainHeight = calculateChainHeight(draggedBlockId);
+
+    // 1. Determine if we are snapping inside a loop FIRST.
+    const directParentBlock = appState.blockSpace[snapInfo.parentId];
+    const isSnappingInLoop = directParentBlock?.sizes?.some(s => s.loop) &&
+                            snapInfo.parentSnapPoint.name.startsWith('topInner');
+
+    // CASE A: We are snapping inside a loop.
+    if (isSnappingInLoop) {
+        const loopBlock = directParentBlock;
+        const innerSnapName = snapInfo.parentSnapPoint.name;
+
+        // Part 1: Displace the blocks already inside this loop branch to make room.
+        if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
+            const insertionDeltaY = draggedChainHeight * APP_SCALE;
+            addDisplacement(snapInfo.originalChildId, insertionDeltaY);
         }
-        const ancestorInfo = findAncestorLoop(snapInfo.parentId, appState.blockSpace);
-        if (ancestorInfo?.loopBlock) {
-            const loopBlock = ancestorInfo.loopBlock;
-            generateShape(loopBlock.uuid, loopBlock.type, loopBlock.colors, loopBlock.sizes);
+
+        // Part 2: Handle the visual expansion of the loop body itself.
+        const previewSizes = JSON.parse(JSON.stringify(loopBlock.sizes));
+        const branchIndex = parseInt(innerSnapName.replace('topInner', ''));
+        const loopBranch = previewSizes[branchIndex];
+
+        if (loopBranch) {
+            const oldLoopHeight = loopBlock.sizes[branchIndex].loop.height;
+            const existingChainHeight = calculateChainHeight(loopBlock.children[innerSnapName]);
+            const newLoopHeight = Math.max(existingChainHeight + draggedChainHeight, MIN_LOOP_HEIGHT);
+
+            if (newLoopHeight !== oldLoopHeight) {
+                loopBranch.loop.height = newLoopHeight;
+                generateShape(loopBlock.uuid, loopBlock.type, loopBlock.colors, previewSizes);
+
+                // This delta pushes down blocks attached to the BOTTOM of the loop.
+                const loopExpansionDeltaY = (newLoopHeight - oldLoopHeight) * APP_SCALE * constants.BLOCK_HEIGHT;
+                addDisplacement(loopBlock.children.bottom, loopExpansionDeltaY);
+
+                // Also push down other inner branches if they exist (for multi-branch loops).
+                loopBlock.sizes.forEach((_, i) => {
+                    if (i === branchIndex) return;
+                    const otherBranchSnapName = 'topInner' + i;
+                    addDisplacement(loopBlock.children[otherBranchSnapName], loopExpansionDeltaY);
+                });
+            }
         }
     }
+    // CASE B: Standard insertion (not inside a loop).
+    else if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
+        const insertionDeltaY = draggedChainHeight * APP_SCALE * constants.BLOCK_HEIGHT;
+        addDisplacement(snapInfo.originalChildId, insertionDeltaY);
+    }
+
+    // 3. Convert the displacement map to the array format expected by draggable.js
+    const finalDisplacements = Object.entries(displacements).map(([id, deltaY]) => ({ id, deltaY }));
+
+    return finalDisplacements.length > 0 ? { displacedBlocks: finalDisplacements } : null;
 }
 
 function handleDetach(childId, shouldRender = true) {
