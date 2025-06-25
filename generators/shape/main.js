@@ -95,7 +95,7 @@ function calculateChainHeight(startBlockId) {
         const currentBlock = appState.blockSpace[currentBlockId];
         currentBlockId = currentBlock?.children['bottom'];
     }
-    return totalHeight;
+    return totalHeight* APP_SCALE;
 }
 
 function recalculateAllLayouts() {
@@ -344,8 +344,8 @@ function onSnapPreview(snapInfo, draggedBlockId) {
     if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
         // This is the corrected line. The block unit height is now properly
         // scaled to SVG coordinate space units (pixels).
-        const insertionDeltaY = draggedChainHeight * APP_SCALE;
-        addDisplacement(snapInfo.originalChildId, insertionDeltaY*APP_SCALE);
+        const insertionDeltaY = draggedChainHeight;
+        addDisplacement(snapInfo.originalChildId, insertionDeltaY);
     }
 
     // 2. Handle displacement from loop expansion.
