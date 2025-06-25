@@ -71,13 +71,10 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         displacedChainInfo = null;
     }
 
-    // Called when a block enters a new snap radius.
+    // MODIFIED: Called when a block enters a new snap radius.
+    // This function now assumes it's being called on a clean slate.
+    // The responsibility of clearing the previous state is now handled by the `drag` function.
     function handleSnapEnter(newSnapInfo) {
-        // This ensures any previous snap state is cleared before starting a new one.
-        if (currentSnapTarget) {
-            handleSnapLeave();
-        }
-        
         currentSnapTarget = newSnapInfo;
 
         // Notify main app to start a preview (e.g., expand a loop).
@@ -177,6 +174,8 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         if (event.cancelable) event.preventDefault();
     }
 
+    // MODIFIED: This function's logic is now clearer and more robust.
+    // It ensures that snap previews are updated instantly on every relevant mouse move.
     function drag(event) {
         if (!isDragging || !selectedElement) return;
         if (event.cancelable) event.preventDefault();
@@ -185,23 +184,28 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         const mouseDrivenPos = { x: coord.x - offset.x, y: coord.y - offset.y };
         const dragGroupIds = dragGroup.map(item => item.id);
 
+        // Find the best potential snap for the current position.
         const newSnapInfo = checkForSnap(selectedElement.id, mouseDrivenPos, dragGroupIds);
 
-        // This is the core logic: check if the snap target has changed since the last frame.
-        const hasChangedSnapTarget = (!newSnapInfo && currentSnapTarget) ||
-            (newSnapInfo && (!currentSnapTarget ||
-                newSnapInfo.parentId !== currentSnapTarget.parentId ||
-                newSnapInfo.parentSnapPoint.name !== currentSnapTarget.parentSnapPoint.name));
+        // Determine if the snap state is the same as the last frame.
+        const isSameSnapTarget = newSnapInfo && currentSnapTarget &&
+            newSnapInfo.parentId === currentSnapTarget.parentId &&
+            newSnapInfo.parentSnapPoint.name === currentSnapTarget.parentSnapPoint.name;
 
-        if (hasChangedSnapTarget) {
+        // If the snap state has changed, update the visual preview. This robustly
+        // handles all transitions: null -> snap, snap -> null, and snapA -> snapB.
+        if (!isSameSnapTarget) {
+            // First, always clean up any existing preview state.
+            handleSnapLeave();
+            
+            // Then, if there's a new snap point, create the new preview state.
             if (newSnapInfo) {
                 handleSnapEnter(newSnapInfo);
-            } else {
-                handleSnapLeave();
             }
         }
 
-        // Position the dragged group based on whether it's snapped or not
+        // Position the dragged group based on the up-to-date snap state.
+        // `currentSnapTarget` is either null or the new snap info from the logic above.
         const finalPos = currentSnapTarget ? currentSnapTarget.position : mouseDrivenPos;
         dragGroup.forEach(item => {
             const newPos = { x: finalPos.x + item.relativeOffset.x, y: finalPos.y + item.relativeOffset.y };
