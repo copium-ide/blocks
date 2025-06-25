@@ -223,14 +223,15 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
         const circleRadius = 5 / main.APP_SCALE;
         const dragGroupIds = dragGroup.map(item => item.id);
 
+        // Render male snap points on static blocks
         for (const blockId in allBlocks) {
             if (dragGroupIds.includes(blockId)) continue;
             const blockData = allBlocks[blockId];
             if (!blockData.snapPoints || !blockData.transform) continue;
             blockData.snapPoints.forEach((point) => {
-                const cx = blockData.transform.x + (point.x * main.APP_SCALE);
-                const cy = blockData.transform.y + (point.y * main.APP_SCALE);
                 if (point.role === 'male') {
+                    const cx = blockData.transform.x + (point.x * main.APP_SCALE);
+                    const cy = blockData.transform.y + (point.y * main.APP_SCALE);
                     const isOccupied = blockData.children && blockData.children[point.name];
                     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                     circle.setAttribute('cx', cx);
@@ -241,6 +242,8 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
                 }
             });
         }
+        
+        // Render female snap points on the currently dragged block
         const draggedBlockData = allBlocks[selectedElement.id];
         if (draggedBlockData && draggedBlockData.snapPoints) {
             draggedBlockData.snapPoints.forEach(point => {
@@ -248,7 +251,7 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
                     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                     circle.setAttribute('r', circleRadius);
                     circle.setAttribute('fill', 'rgba(255, 100, 100, 0.8)');
-                    circle.dataset.blockId = selectedElement.id;
+                    circle.dataset.blockId = selectedElement.id; // Tag it for updates
                     snapPointVisualizerGroup.appendChild(circle);
                 }
             });
@@ -261,11 +264,13 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
         const blockData = allBlocks[selectedElement.id];
         if (!blockData || !blockData.snapPoints) return;
         const femalePoints = blockData.snapPoints.filter(p => p.role === 'female');
+        
         activeCircles.forEach((circle, index) => {
             const point = femalePoints[index];
             if (point) {
                 circle.setAttribute('cx', newBlockPos.x + (point.x * main.APP_SCALE));
-                circle.setAttribute('cy', newBlock_pos.y + (point.y * main.APP_SCALE));
+                // *** THIS IS THE FIX: Corrected variable name ***
+                circle.setAttribute('cy', newBlockPos.y + (point.y * main.APP_SCALE));
             }
         });
     }
