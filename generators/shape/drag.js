@@ -11,7 +11,7 @@ function getDragGroup(blockId, allBlocks) {
     return group;
 }
 
-export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSnapPreview, onSnapPreviewEnd) {
+export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
     const SNAP_RADIUS = 100;
 
     // --- Drag State ---
@@ -22,9 +22,9 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
 
     // --- Snap State ---
     let currentSnapTarget = null;
-    // This will store the list of blocks displaced during a preview.
-    let previewDisplacedBlocks = null;
     let snapPointVisualizerGroup = null;
+    // This tracks the connection broken by an insertion, so it can be restored.
+    let restorableConnection = null;
 
 
     function getSVGCoordinates(event) {
@@ -43,63 +43,6 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         return ctm ? pt.matrixTransform(ctm.inverse()) : { x: 0, y: 0 };
     }
 
-    // --- Snap Preview Logic ---
-
-    function handleSnapLeave() {
-        if (!currentSnapTarget) return;
-
-        // Ask main.js to clean up any temporary shape changes (e.g., un-expanding a loop)
-        if (onSnapPreviewEnd) {
-            onSnapPreviewEnd(currentSnapTarget);
-        }
-
-        // Revert all visual displacements from the last preview.
-        if (previewDisplacedBlocks) {
-            previewDisplacedBlocks.forEach(displacement => {
-                const groupToRevert = getDragGroup(displacement.id, allBlocks);
-                groupToRevert.forEach(blockId => {
-                    const blockEl = document.getElementById(blockId);
-                    const originalTransform = allBlocks[blockId].transform;
-                    if (blockEl) {
-                        blockEl.setAttribute('x', originalTransform.x);
-                        blockEl.setAttribute('y', originalTransform.y);
-                    }
-                });
-            });
-        }
-
-        // Clear all preview state
-        currentSnapTarget = null;
-        previewDisplacedBlocks = null;
-    }
-
-    function handleSnapEnter(newSnapInfo) {
-        currentSnapTarget = newSnapInfo;
-
-        // Ask main.js to calculate all necessary visual changes for the preview.
-        if (onSnapPreview) {
-            const previewResult = onSnapPreview(newSnapInfo, selectedElement.id);
-
-            // If the preview resulted in blocks needing to move, apply those changes visually.
-            if (previewResult && previewResult.displacedBlocks) {
-                previewDisplacedBlocks = previewResult.displacedBlocks; // Store for cleanup
-                previewDisplacedBlocks.forEach(displacement => {
-                    const groupToMove = getDragGroup(displacement.id, allBlocks);
-                    groupToMove.forEach(blockId => {
-                        const blockEl = document.getElementById(blockId);
-                        const originalTransform = allBlocks[blockId].transform;
-                        if (blockEl) {
-                            // Apply the calculated delta to the block's visual position.
-                            blockEl.setAttribute('x', originalTransform.x);
-                            blockEl.setAttribute('y', originalTransform.y + displacement.deltaY);
-                        }
-                    });
-                });
-            }
-        }
-    }
-
-
     // --- Drag Event Handlers ---
 
     function startDrag(event) {
@@ -110,10 +53,14 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
 
         isDragging = true;
         selectedElement = target;
+        
+        // Clear any leftover state from a previous drag.
+        restorableConnection = null;
+        currentSnapTarget = null;
 
         const blockData = allBlocks[selectedElement.id];
-        if (blockData && blockData.parent && onDetach) {
-            onDetach(selectedElement.id);
+        if (blockData && blockData.parent) {
+            onDetach(selectedElement.id, null, true); // Detach without restoring anything
         }
 
         const mainBlockStartPos = blockData.transform || { x: 0, y: 0 };
@@ -162,38 +109,50 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
 
         const newSnapInfo = checkForSnap(selectedElement.id, mouseDrivenPos, dragGroupIds);
 
-        const isSameSnapTarget = newSnapInfo && currentSnapTarget &&
-            newSnapInfo.parentId === currentSnapTarget.parentId &&
-            newSnapInfo.parentSnapPoint.name === currentSnapTarget.parentSnapPoint.name;
+        if (newSnapInfo) {
+            const isSameTarget = currentSnapTarget &&
+                                 currentSnapTarget.parentId === newSnapInfo.parentId &&
+                                 currentSnapTarget.parentSnapPoint.name === newSnapInfo.parentSnapPoint.name;
 
-        if (!isSameSnapTarget) {
-            handleSnapLeave(); // Clean up the old preview
-            if (newSnapInfo) {
-                handleSnapEnter(newSnapInfo); // Create the new preview
+            if (!isSameTarget) {
+                // If we are about to make an insertion, save the connection we're breaking.
+                if (newSnapInfo.snapType === 'insertion') {
+                    restorableConnection = {
+                        childId: newSnapInfo.originalChildId,
+                        parentId: newSnapInfo.parentId,
+                        snapPointName: newSnapInfo.parentSnapPoint.name
+                    };
+                }
+                onSnap(selectedElement.id, newSnapInfo.position, newSnapInfo);
+                currentSnapTarget = newSnapInfo;
             }
+        } else {
+            if (currentSnapTarget) {
+                // We were snapped, but now we're not. Detach and restore the old connection if one exists.
+                onDetach(selectedElement.id, restorableConnection, true);
+                currentSnapTarget = null;
+                restorableConnection = null; // The connection has been restored, so clear it.
+            }
+            
+            // Make the block follow the mouse.
+            dragGroup.forEach(item => {
+                const newPos = { x: mouseDrivenPos.x + item.relativeOffset.x, y: mouseDrivenPos.y + item.relativeOffset.y };
+                item.el.setAttribute('x', newPos.x);
+                item.el.setAttribute('y', newPos.y);
+            });
         }
-
-        // The dragged block is always positioned at the snap point (if one exists) or the mouse position.
-        const finalPos = currentSnapTarget ? currentSnapTarget.position : mouseDrivenPos;
-        dragGroup.forEach(item => {
-            const newPos = { x: finalPos.x + item.relativeOffset.x, y: finalPos.y + item.relativeOffset.y };
-            item.el.setAttribute('x', newPos.x);
-            item.el.setAttribute('y', newPos.y);
-        });
-        updateActiveVisualizers(finalPos);
+        
+        updateActiveVisualizers(mouseDrivenPos);
     }
 
     function endDrag() {
         if (!isDragging) return;
 
-        // Commit the final state to the data model.
-        if (onDragEnd && selectedElement) {
+        if (!currentSnapTarget && selectedElement) {
             const finalTransform = { x: selectedElement.x.baseVal.value, y: selectedElement.y.baseVal.value };
-            onDragEnd(selectedElement.id, finalTransform, currentSnapTarget);
+            onSnap(selectedElement.id, finalTransform, null);
         }
 
-        // Clean up any lingering preview visuals.
-        handleSnapLeave();
         removeSnapVisualizers();
 
         if (selectedElement) {
@@ -203,6 +162,8 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         isDragging = false;
         selectedElement = null;
         dragGroup = [];
+        currentSnapTarget = null;
+        restorableConnection = null;
 
         window.removeEventListener('mousemove', drag);
         window.removeEventListener('mouseup', endDrag);
@@ -211,12 +172,13 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         window.removeEventListener('blur', endDrag);
     }
 
-    // --- Utility and Visualizer Functions (Unchanged) ---
+    // --- Utility and Visualizer Functions ---
 
     function checkForSnap(draggedBlockId, currentPos, dragGroupIds) {
         const effectiveSnapRadius = SNAP_RADIUS / main.APP_SCALE;
         const draggedBlockData = allBlocks[draggedBlockId];
-        if (!draggedBlockData || !draggedBlockData.snapPoints || draggedBlockData.parent) return null;
+        
+        if (!draggedBlockData || !draggedBlockData.snapPoints) return null;
 
         const draggedFemalePoint = draggedBlockData.snapPoints.find(p => p.role === 'female');
         if (!draggedFemalePoint) return null;
@@ -280,7 +242,7 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
             });
         }
         const draggedBlockData = allBlocks[selectedElement.id];
-        if (draggedBlockData && draggedBlockData.snapPoints && !draggedBlockData.parent) {
+        if (draggedBlockData && draggedBlockData.snapPoints) {
             draggedBlockData.snapPoints.forEach(point => {
                 if (point.role === 'female') {
                     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -303,7 +265,7 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
             const point = femalePoints[index];
             if (point) {
                 circle.setAttribute('cx', newBlockPos.x + (point.x * main.APP_SCALE));
-                circle.setAttribute('cy', newBlockPos.y + (point.y * main.APP_SCALE));
+                circle.setAttribute('cy', newBlock_pos.y + (point.y * main.APP_SCALE));
             }
         });
     }
