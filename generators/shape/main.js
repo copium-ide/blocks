@@ -317,10 +317,13 @@ function handleDetach(childId, shouldRender = true) {
     }
 }
 
-function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
+// Renamed from onDragEnd. This is now the definitive "snap" action.
+function handleSnap(draggedBlockId, finalTransform, snapInfo) {
     const mainDraggedBlock = appState.blockSpace[draggedBlockId];
     if (!mainDraggedBlock) return;
 
+    // The transform is set first, but will be corrected by recalculateAllLayouts
+    // if a parent is successfully set.
     mainDraggedBlock.transform.x = finalTransform.x;
     mainDraggedBlock.transform.y = finalTransform.y;
 
@@ -416,8 +419,8 @@ function main() {
 
     setupWorkspaceViewBox();
     setupEventListeners();
-    // Updated call: removed onSnapPreview and onSnapPreviewEnd
-    drag.makeDraggable(dom.workSpace, appState.blockSpace, onDragEnd, handleDetach);
+    // Pass the real state-changing functions to the drag handler.
+    drag.makeDraggable(dom.workSpace, appState.blockSpace, handleSnap, handleDetach);
 
     createBlock("hat");
 }
