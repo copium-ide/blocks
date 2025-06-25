@@ -341,74 +341,6 @@ function onSnapPreview(snapInfo, draggedBlockId) {
 
     const draggedChainHeight = calculateChainHeight(draggedBlockId);
 
-    // 1. Handle displacement from insertion.
-    if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
-        // This is the corrected line. The block unit height is now properly
-        // scaled to SVG coordinate space units (pixels).
-        const insertionDeltaY = draggedChainHeight * APP_SCALE * constants.BLOCK_HEIGHT;
-        addDisplacement(snapInfo.originalChildId, insertionDeltaY);
-    }
-
-    // 2. Handle displacement from loop expansion.
-    let loopBlock = null;
-    let innerSnapName = null;
-
-    const directParentBlock = appState.blockSpace[snapInfo.parentId];
-    if (directParentBlock?.sizes?.some(s => s.loop) && snapInfo.parentSnapPoint.name.startsWith('topInner')) {
-        loopBlock = directParentBlock;
-        innerSnapName = snapInfo.parentSnapPoint.name;
-    } else {
-        const ancestorInfo = findAncestorLoop(snapInfo.parentId, appState.blockSpace);
-        if (ancestorInfo) {
-            loopBlock = ancestorInfo.loopBlock;
-            innerSnapName = ancestorInfo.innerSnapName;
-        }
-    }
-
-    if (loopBlock) {
-        const previewSizes = JSON.parse(JSON.stringify(loopBlock.sizes));
-        const branchIndex = parseInt(innerSnapName.replace('topInner', ''));
-        const loopBranch = previewSizes[branchIndex];
-
-        if (loopBranch) {
-            const oldLoopHeight = loopBlock.sizes[branchIndex].loop.height;
-            const existingChainHeight = calculateChainHeight(loopBlock.children[innerSnapName]);
-            const newLoopHeight = Math.max(existingChainHeight + draggedChainHeight, MIN_LOOP_HEIGHT);
-
-            if (newLoopHeight !== oldLoopHeight) {
-                loopBranch.loop.height = newLoopHeight;
-                generateShape(loopBlock.uuid, loopBlock.type, loopBlock.colors, previewSizes);
-
-                const loopExpansionDeltaY = (newLoopHeight - oldLoopHeight) * APP_SCALE;
-
-                addDisplacement(loopBlock.children.bottom, loopExpansionDeltaY);
-
-                loopBlock.sizes.forEach((_, i) => {
-                    if (i === branchIndex) return;
-                    const otherBranchSnapName = 'topInner' + i;
-                    addDisplacement(loopBlock.children[otherBranchSnapName], loopExpansionDeltaY);
-                });
-            }
-        }
-    }
-
-    // 3. Convert the displacement map to the array format expected by draggable.js
-    const finalDisplacements = Object.entries(displacements).map(([id, deltaY]) => ({ id, deltaY }));
-
-    return finalDisplacements.length > 0 ? { displacedBlocks: finalDisplacements } : null;
-}
-
-function onSnapPreview(snapInfo, draggedBlockId) {
-    if (!snapInfo.parentId) return null;
-
-    const displacements = {};
-    const addDisplacement = (blockId, deltaY) => {
-        if (!blockId) return;
-        displacements[blockId] = (displacements[blockId] || 0) + deltaY;
-    };
-
-    const draggedChainHeight = calculateChainHeight(draggedBlockId);
-
     // 1. Determine if we are snapping inside a loop FIRST.
     const directParentBlock = appState.blockSpace[snapInfo.parentId];
     const isSnappingInLoop = directParentBlock?.sizes?.some(s => s.loop) &&
@@ -462,6 +394,20 @@ function onSnapPreview(snapInfo, draggedBlockId) {
     const finalDisplacements = Object.entries(displacements).map(([id, deltaY]) => ({ id, deltaY }));
 
     return finalDisplacements.length > 0 ? { displacedBlocks: finalDisplacements } : null;
+}
+
+function onSnapPreviewEnd(snapInfo) {
+    if (snapInfo.parentId) {
+        const directParent = appState.blockSpace[snapInfo.parentId];
+        if (directParent) {
+             generateShape(directParent.uuid, directParent.type, directParent.colors, directParent.sizes);
+        }
+        const ancestorInfo = findAncestorLoop(snapInfo.parentId, appState.blockSpace);
+        if (ancestorInfo?.loopBlock) {
+            const loopBlock = ancestorInfo.loopBlock;
+            generateShape(loopBlock.uuid, loopBlock.type, loopBlock.colors, loopBlock.sizes);
+        }
+    }
 }
 
 function handleDetach(childId, shouldRender = true) {
