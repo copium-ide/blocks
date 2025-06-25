@@ -1,6 +1,7 @@
 import * as blocks from './blocks.js';
 import * as svg from './svg.js';
 import * as drag from './drag.js';
+import * as constants from './blockComponents.js';
 
 // --- Configuration ---
 export const APP_SCALE = 8;
@@ -344,7 +345,7 @@ function onSnapPreview(snapInfo, draggedBlockId) {
     if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
         // This is the corrected line. The block unit height is now properly
         // scaled to SVG coordinate space units (pixels).
-        const insertionDeltaY = draggedChainHeight * APP_SCALE;
+        const insertionDeltaY = draggedChainHeight * APP_SCALE * constants.BLOCK_HEIGHT;
         addDisplacement(snapInfo.originalChildId, insertionDeltaY);
     }
 
