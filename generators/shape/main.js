@@ -7,7 +7,6 @@ export const APP_SCALE = 8;
 const MIN_LOOP_HEIGHT = 0.5;
 
 // --- DOM Element References ---
-// ... (no changes in this section)
 function getElements() {
     return {
         workSpace: document.getElementById('workspace'),
@@ -33,7 +32,6 @@ const appState = {
 };
 
 // --- Utility Functions ---
-// ... (no changes to clearNode, setupWorkspaceViewBox, getDragGroup)
 function clearNode(node) {
     if (!node) return;
     while (node.firstChild) {
@@ -58,7 +56,6 @@ function getDragGroup(blockId, allBlocks, group = []) {
     return group;
 }
 
-// --- NEW HELPER FUNCTION ---
 /**
  * Traverses up the parent chain from a given block to find if it's inside a loop.
  * @param {string} startBlockId The ID of the block to start searching from.
@@ -94,7 +91,7 @@ function findAncestorLoop(startBlockId, allBlocks) {
 
 
 // --- Layout Calculation Logic (Reads from state) ---
-// ... (no changes in this section)
+
 function getBlockVisualHeight(blockId) {
     const block = appState.blockSpace[blockId];
     if (!block) return 0;
@@ -165,12 +162,9 @@ function recalculateAllLayouts() {
 
 
 // --- Rendering Logic (Reads from state, writes to DOM) ---
-// ... (no changes in this section)
-function render() {
-    // 1. Calculate all derived values and update the state object.
-    recalculateAllLayouts();
 
-    // 2. Render all parts of the UI based on the finalized state.
+function render() {
+    recalculateAllLayouts();
     renderBlocks();
     renderDimensionSliders();
     populateSelector();
@@ -188,14 +182,12 @@ function renderBlocks() {
     const existingBlockIds = new Set(Array.from(dom.workSpace.querySelectorAll('svg[blocktype]')).map(el => el.id));
     const stateBlockIds = new Set(Object.keys(appState.blockSpace));
 
-    // Remove blocks from DOM that are no longer in the state
     for (const id of existingBlockIds) {
         if (!stateBlockIds.has(id)) {
             document.getElementById(id)?.remove();
         }
     }
 
-    // Add/Update blocks based on the state
     for (const id of stateBlockIds) {
         const blockData = appState.blockSpace[id];
         let blockElm = document.getElementById(id);
@@ -286,7 +278,7 @@ function renderDimensionSliders() {
 
 
 // --- Core Application Logic / "Actions" (Modify state, then call render) ---
-// ... (no changes to setParent, editBlock, createBlock, removeBlock)
+
 function setParent(childId, newParentId, parentSnapPointName) {
     const childBlock = appState.blockSpace[childId];
     if (!childBlock) return;
@@ -351,12 +343,10 @@ function removeBlock(uuid) {
     render();
 }
 
-
 // --- Drag and Drop Handlers ---
 
-// --- MODIFIED onSnapPreview FUNCTION ---
 function onSnapPreview(snapInfo, draggedBlockId) {
-    if (!snapInfo.parentId) return;
+    if (!snapInfo.parentId) return null;
 
     let loopBlock = null;
     let innerSnapName = null;
@@ -376,8 +366,7 @@ function onSnapPreview(snapInfo, draggedBlockId) {
         }
     }
 
-    // If we didn't find a relevant loop block in either case, do nothing.
-    if (!loopBlock) return;
+    if (!loopBlock) return null; // No relevant loop found
 
     // --- Perform the visual preview update ---
     const previewSizes = JSON.parse(JSON.stringify(loopBlock.sizes));
@@ -385,21 +374,43 @@ function onSnapPreview(snapInfo, draggedBlockId) {
     const loopBranch = previewSizes[branchIndex];
 
     if (loopBranch) {
-        // Calculate the total height needed: the existing chain + the new dragged chain.
+        const oldLoopHeight = loopBlock.sizes[branchIndex].loop.height;
+        
         const existingChainHeight = calculateChainHeight(loopBlock.children[innerSnapName]);
         const draggedChainHeight = calculateChainHeight(draggedBlockId);
-        const totalPreviewHeight = existingChainHeight + draggedChainHeight;
+        const newLoopHeight = Math.max(existingChainHeight + draggedChainHeight, MIN_LOOP_HEIGHT);
 
-        loopBranch.loop.height = Math.max(totalPreviewHeight, MIN_LOOP_HEIGHT);
+        // If the height is actually changing, calculate displacement for other blocks.
+        if (newLoopHeight !== oldLoopHeight) {
+            loopBranch.loop.height = newLoopHeight;
+            generateShape(loopBlock.uuid, loopBlock.type, loopBlock.colors, previewSizes);
 
-        // Directly call generateShape for a temporary visual update without changing state.
-        generateShape(loopBlock.uuid, loopBlock.type, loopBlock.colors, previewSizes);
+            const deltaY = (newLoopHeight - oldLoopHeight) * APP_SCALE;
+            const displacedBlocks = [];
+
+            // Find block attached to the bottom of the loop block
+            if (loopBlock.children.bottom) {
+                displacedBlocks.push({ id: loopBlock.children.bottom, deltaY });
+            }
+
+            // Find blocks in OTHER branches of the same loop block
+            loopBlock.sizes.forEach((_, i) => {
+                if (i === branchIndex) return; // Skip the current branch
+                const otherBranchSnapName = 'topInner' + i;
+                if (loopBlock.children[otherBranchSnapName]) {
+                    displacedBlocks.push({ id: loopBlock.children[otherBranchSnapName], deltaY });
+                }
+            });
+
+            // Return the displacement info to draggable.js
+            return { displacedBlocks };
+        }
     }
+
+    return null; // No change, so nothing to return
 }
 
-
 function onSnapPreviewEnd(snapInfo) {
-    // This function doesn't need to change. It correctly reverts any preview.
     if (snapInfo.parentId) {
         // Find the block that might have been previewed. It could be the direct parent
         // or an ancestor. Re-rendering from the true state data fixes it.
@@ -428,7 +439,6 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
     const mainDraggedBlock = appState.blockSpace[draggedBlockId];
     if (!mainDraggedBlock) return;
 
-    // Update the position of the dragged block in the state.
     mainDraggedBlock.transform.x = finalTransform.x;
     mainDraggedBlock.transform.y = finalTransform.y;
 
@@ -444,12 +454,11 @@ function onDragEnd(draggedBlockId, finalTransform, snapInfo) {
             setParent(draggedBlockId, snapInfo.parentId, snapInfo.parentSnapPoint.name);
         }
     }
-    // A single render call will update all positions and visuals correctly.
     render();
 }
 
 // --- Event Listener Setup ---
-// ... (no changes in this section)
+
 function setupEventListeners() {
     window.addEventListener('resize', setupWorkspaceViewBox);
 
@@ -498,7 +507,7 @@ function setupEventListeners() {
                 dom.color1input.value = block.colors.inner;
                 dom.color2input.value = block.colors.outer;
             }
-            render(); // Re-render sliders for the new target
+            render();
         });
     }
 
@@ -516,7 +525,7 @@ function setupEventListeners() {
 }
 
 // --- Main Application Entry Point ---
-// ... (no changes in this section)
+
 function main() {
     if (!dom.workSpace) {
         console.error("The <svg id='workspace'> element was not found. Application cannot start.");
@@ -527,7 +536,6 @@ function main() {
     setupEventListeners();
     drag.makeDraggable(dom.workSpace, appState.blockSpace, onDragEnd, handleDetach, onSnapPreview, onSnapPreviewEnd);
 
-    // Create the first block, which will trigger the initial render.
     createBlock("hat");
 }
 

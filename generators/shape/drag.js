@@ -23,6 +23,8 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
     // --- Snap State ---
     let currentSnapTarget = null; // The active snap info object
     let displacedChainInfo = null; // Info about a chain displaced by an 'insertion' preview
+    // For displacements caused by external events, like a loop expanding.
+    let externallyDisplacedChainInfo = null;
     let snapPointVisualizerGroup = null;
 
 
@@ -44,16 +46,14 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
 
     // --- Snap Preview Logic ---
 
-    // Called when a block is no longer snapped to a point.
     function handleSnapLeave() {
         if (!currentSnapTarget) return;
 
-        // Notify main app to end the preview (e.g., shrink a loop)
         if (onSnapPreviewEnd) {
             onSnapPreviewEnd(currentSnapTarget);
         }
 
-        // If a chain was visually displaced, revert it to its original position.
+        // Revert insertion displacement
         if (displacedChainInfo) {
             const groupToRevert = getDragGroup(displacedChainInfo.id, allBlocks);
             groupToRevert.forEach(blockId => {
@@ -66,24 +66,55 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
             });
         }
 
+        // Revert external displacement (from loop expansion)
+        if (externallyDisplacedChainInfo) {
+            externallyDisplacedChainInfo.forEach(displacement => {
+                const groupToRevert = getDragGroup(displacement.id, allBlocks);
+                groupToRevert.forEach(blockId => {
+                    const blockEl = document.getElementById(blockId);
+                    const originalTransform = allBlocks[blockId].transform;
+                    if (blockEl) {
+                        blockEl.setAttribute('x', originalTransform.x);
+                        blockEl.setAttribute('y', originalTransform.y);
+                    }
+                });
+            });
+        }
+
+
         // Clear the state
         currentSnapTarget = null;
         displacedChainInfo = null;
+        externallyDisplacedChainInfo = null; // Clear new state
     }
 
-    // MODIFIED: Called when a block enters a new snap radius.
-    // This function now assumes it's being called on a clean slate.
-    // The responsibility of clearing the previous state is now handled by the `drag` function.
     function handleSnapEnter(newSnapInfo) {
         currentSnapTarget = newSnapInfo;
 
-        // Notify main app to start a preview (e.g., expand a loop).
-        // This is called for ALL snap types ('append' and 'insertion').
+        // Capture return value from onSnapPreview
         if (onSnapPreview) {
-            onSnapPreview(newSnapInfo, selectedElement.id);
+            const previewResult = onSnapPreview(newSnapInfo, selectedElement.id);
+
+            // If the preview resulted in other blocks needing to move (e.g. loop expanded)
+            if (previewResult && previewResult.displacedBlocks) {
+                externallyDisplacedChainInfo = previewResult.displacedBlocks; // Store for cleanup
+                externallyDisplacedChainInfo.forEach(displacement => {
+                    const groupToMove = getDragGroup(displacement.id, allBlocks);
+                    groupToMove.forEach(blockId => {
+                        const blockEl = document.getElementById(blockId);
+                        const originalTransform = allBlocks[blockId].transform;
+                        if (blockEl) {
+                            // Only Y is changed, but setting both is safer.
+                            blockEl.setAttribute('x', originalTransform.x);
+                            blockEl.setAttribute('y', originalTransform.y + displacement.deltaY);
+                        }
+                    });
+                });
+            }
         }
 
         // For 'insertion' snaps, also visually displace the existing chain.
+        // This logic is separate and can happen at the same time as the above.
         if (newSnapInfo.snapType === 'insertion' && newSnapInfo.originalChildId) {
             const displacedBlock = allBlocks[newSnapInfo.originalChildId];
             const draggedBlock = allBlocks[selectedElement.id];
@@ -95,14 +126,12 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
 
                 if (draggedBottomPoint && displacedTopPoint) {
                     const snappedDraggedPos = newSnapInfo.position;
-                    // Calculate where the displaced block *should* be
                     const newX = snappedDraggedPos.x + (draggedBottomPoint.x * main.APP_SCALE) - (displacedTopPoint.x * main.APP_SCALE);
                     const newY = snappedDraggedPos.y + (draggedBottomPoint.y * main.APP_SCALE) - (displacedTopPoint.y * main.APP_SCALE);
                     
                     const deltaX = newX - displacedBlock.transform.x;
                     const deltaY = newY - displacedBlock.transform.y;
 
-                    // Move the entire displaced chain visually
                     const groupToMove = getDragGroup(newSnapInfo.originalChildId, allBlocks);
                     groupToMove.forEach(blockId => {
                         const blockEl = document.getElementById(blockId);
@@ -174,8 +203,6 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         if (event.cancelable) event.preventDefault();
     }
 
-    // MODIFIED: This function's logic is now clearer and more robust.
-    // It ensures that snap previews are updated instantly on every relevant mouse move.
     function drag(event) {
         if (!isDragging || !selectedElement) return;
         if (event.cancelable) event.preventDefault();
@@ -184,28 +211,19 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         const mouseDrivenPos = { x: coord.x - offset.x, y: coord.y - offset.y };
         const dragGroupIds = dragGroup.map(item => item.id);
 
-        // Find the best potential snap for the current position.
         const newSnapInfo = checkForSnap(selectedElement.id, mouseDrivenPos, dragGroupIds);
 
-        // Determine if the snap state is the same as the last frame.
         const isSameSnapTarget = newSnapInfo && currentSnapTarget &&
             newSnapInfo.parentId === currentSnapTarget.parentId &&
             newSnapInfo.parentSnapPoint.name === currentSnapTarget.parentSnapPoint.name;
 
-        // If the snap state has changed, update the visual preview. This robustly
-        // handles all transitions: null -> snap, snap -> null, and snapA -> snapB.
         if (!isSameSnapTarget) {
-            // First, always clean up any existing preview state.
             handleSnapLeave();
-            
-            // Then, if there's a new snap point, create the new preview state.
             if (newSnapInfo) {
                 handleSnapEnter(newSnapInfo);
             }
         }
 
-        // Position the dragged group based on the up-to-date snap state.
-        // `currentSnapTarget` is either null or the new snap info from the logic above.
         const finalPos = currentSnapTarget ? currentSnapTarget.position : mouseDrivenPos;
         dragGroup.forEach(item => {
             const newPos = { x: finalPos.x + item.relativeOffset.x, y: finalPos.y + item.relativeOffset.y };
@@ -218,14 +236,11 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
     function endDrag() {
         if (!isDragging) return;
 
-        // Finalize the drag in the main application logic using the last known snap state
         if (onDragEnd && selectedElement) {
             const finalTransform = { x: selectedElement.x.baseVal.value, y: selectedElement.y.baseVal.value };
-            // Use the state `currentSnapTarget`, don't recalculate.
             onDragEnd(selectedElement.id, finalTransform, currentSnapTarget);
         }
 
-        // Clean up all visual artifacts and state
         handleSnapLeave();
         removeSnapVisualizers();
 
@@ -233,12 +248,10 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
             selectedElement.classList.remove('active');
         }
 
-        // Reset state for the next drag
         isDragging = false;
         selectedElement = null;
         dragGroup = [];
 
-        // Remove listeners
         window.removeEventListener('mousemove', drag);
         window.removeEventListener('mouseup', endDrag);
         window.removeEventListener('touchmove', drag);
