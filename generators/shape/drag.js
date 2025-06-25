@@ -11,7 +11,7 @@ function getDragGroup(blockId, allBlocks) {
     return group;
 }
 
-export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSnapPreview, onSnapPreviewEnd) {
+export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach) {
     const SNAP_RADIUS = 100;
 
     // --- Drag State ---
@@ -20,10 +20,8 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
     let dragGroup = [];
     let offset = { x: 0, y: 0 };
 
-    // --- Snap State (Simplified) ---
+    // --- Snap State ---
     let currentSnapTarget = null;
-    // A single list for all blocks displaced during a preview (by insertion, loop expansion, etc.)
-    let previewDisplacedBlocks = null;
     let snapPointVisualizerGroup = null;
 
 
@@ -43,64 +41,6 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         return ctm ? pt.matrixTransform(ctm.inverse()) : { x: 0, y: 0 };
     }
 
-    // --- Snap Preview Logic (Simplified) ---
-
-    function handleSnapLeave() {
-        if (!currentSnapTarget) return;
-
-        if (onSnapPreviewEnd) {
-            onSnapPreviewEnd(currentSnapTarget);
-        }
-
-        // Revert all preview displacements from a single source of truth.
-        if (previewDisplacedBlocks) {
-            previewDisplacedBlocks.forEach(displacement => {
-                const groupToRevert = getDragGroup(displacement.id, allBlocks);
-                groupToRevert.forEach(blockId => {
-                    const blockEl = document.getElementById(blockId);
-                    const originalTransform = allBlocks[blockId].transform;
-                    if (blockEl) {
-                        blockEl.setAttribute('x', originalTransform.x);
-                        blockEl.setAttribute('y', originalTransform.y);
-                    }
-                });
-            });
-        }
-
-        // Clear all state
-        currentSnapTarget = null;
-        previewDisplacedBlocks = null;
-    }
-
-    function handleSnapEnter(newSnapInfo) {
-        currentSnapTarget = newSnapInfo;
-
-        // Let main.js calculate all necessary visual changes for the preview.
-        if (onSnapPreview) {
-            const previewResult = onSnapPreview(newSnapInfo, selectedElement.id);
-
-            // If the preview resulted in blocks needing to move, apply those changes.
-            if (previewResult && previewResult.displacedBlocks) {
-                previewDisplacedBlocks = previewResult.displacedBlocks; // Store for cleanup
-                previewDisplacedBlocks.forEach(displacement => {
-                    const groupToMove = getDragGroup(displacement.id, allBlocks);
-                    groupToMove.forEach(blockId => {
-                        const blockEl = document.getElementById(blockId);
-                        const originalTransform = allBlocks[blockId].transform;
-                        if (blockEl) {
-                            // The delta is now calculated entirely by main.js
-                            blockEl.setAttribute('x', originalTransform.x);
-                            blockEl.setAttribute('y', originalTransform.y + displacement.deltaY);
-                        }
-                    });
-                });
-            }
-        }
-        // NOTE: The specific logic for 'insertion' displacement has been removed from here
-        // and is now handled comprehensively by onSnapPreview in main.js.
-    }
-
-
     // --- Drag Event Handlers ---
 
     function startDrag(event) {
@@ -113,6 +53,8 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         selectedElement = target;
 
         const blockData = allBlocks[selectedElement.id];
+        // Detach the block from its parent at the start of the drag.
+        // This triggers a render and makes the block "free".
         if (blockData && blockData.parent && onDetach) {
             onDetach(selectedElement.id);
         }
@@ -167,31 +109,58 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
             newSnapInfo.parentId === currentSnapTarget.parentId &&
             newSnapInfo.parentSnapPoint.name === currentSnapTarget.parentSnapPoint.name;
 
+        // If snap state has changed, update the application state.
         if (!isSameSnapTarget) {
-            handleSnapLeave();
-            if (newSnapInfo) {
-                handleSnapEnter(newSnapInfo);
+            // If we were snapped to something, we must first detach from it.
+            // onDetach will set the block's parent to null and trigger a re-render.
+            if (currentSnapTarget) {
+                onDetach(selectedElement.id);
+            }
+
+            currentSnapTarget = newSnapInfo;
+
+            // If we found a new snap point, commit the snap immediately.
+            // onDragEnd handles the parenting logic and triggers a re-render.
+            if (currentSnapTarget) {
+                // The transform passed here is irrelevant because the layout will be
+                // recalculated based on the new parent during the render.
+                onDragEnd(selectedElement.id, { x: 0, y: 0 }, currentSnapTarget);
             }
         }
 
-        const finalPos = currentSnapTarget ? currentSnapTarget.position : mouseDrivenPos;
-        dragGroup.forEach(item => {
-            const newPos = { x: finalPos.x + item.relativeOffset.x, y: finalPos.y + item.relativeOffset.y };
-            item.el.setAttribute('x', newPos.x);
-            item.el.setAttribute('y', newPos.y);
-        });
-        updateActiveVisualizers(finalPos);
+        // If we are not snapped to anything, just move the block with the cursor.
+        // This updates the model's transform directly and moves the SVG element
+        // for performance, avoiding a full re-render on every mouse movement.
+        if (!currentSnapTarget) {
+            const mainBlock = allBlocks[selectedElement.id];
+            if (mainBlock) {
+                // Update the model's state directly
+                mainBlock.transform.x = mouseDrivenPos.x;
+                mainBlock.transform.y = mouseDrivenPos.y;
+                
+                // Manually update the visuals of the entire drag group
+                dragGroup.forEach(item => {
+                    const blockData = allBlocks[item.id];
+                    const newX = mainBlock.transform.x + item.relativeOffset.x;
+                    const newY = mainBlock.transform.y + item.relativeOffset.y;
+                    if (blockData) {
+                        blockData.transform.x = newX;
+                        blockData.transform.y = newY;
+                    }
+                    item.el.setAttribute('x', newX);
+                    item.el.setAttribute('y', newY);
+                });
+            }
+        }
+        
+        updateActiveVisualizers(mouseDrivenPos);
     }
 
     function endDrag() {
         if (!isDragging) return;
 
-        if (onDragEnd && selectedElement) {
-            const finalTransform = { x: selectedElement.x.baseVal.value, y: selectedElement.y.baseVal.value };
-            onDragEnd(selectedElement.id, finalTransform, currentSnapTarget);
-        }
-
-        handleSnapLeave();
+        // The state has already been updated live during the drag.
+        // We just need to clean up the drag-specific visuals and listeners.
         removeSnapVisualizers();
 
         if (selectedElement) {
@@ -201,6 +170,7 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         isDragging = false;
         selectedElement = null;
         dragGroup = [];
+        currentSnapTarget = null;
 
         window.removeEventListener('mousemove', drag);
         window.removeEventListener('mouseup', endDrag);

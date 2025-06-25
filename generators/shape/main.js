@@ -57,28 +57,6 @@ function getDragGroup(blockId, allBlocks, group = []) {
     return group;
 }
 
-function findAncestorLoop(startBlockId, allBlocks) {
-    let childId = null;
-    let currentId = startBlockId;
-
-    while (currentId) {
-        const currentBlock = allBlocks[currentId];
-        if (!currentBlock) return null;
-
-        if (currentBlock.sizes?.some(s => s.loop)) {
-            for (const snapName in currentBlock.children) {
-                if (snapName.startsWith('topInner') && currentBlock.children[snapName] === childId) {
-                    return { loopBlock: currentBlock, innerSnapName: snapName };
-                }
-            }
-        }
-        childId = currentId;
-        currentId = currentBlock.parent;
-    }
-    return null;
-}
-
-
 // --- Layout Calculation Logic (Reads from state) ---
 
 function getBlockVisualHeight(blockId) {
@@ -330,93 +308,6 @@ function removeBlock(uuid) {
 
 // --- Drag and Drop Handlers ---
 
-function onSnapPreview(snapInfo, draggedBlockId) {
-    if (!snapInfo.parentId) return null;
-
-    const displacements = {};
-    const addDisplacement = (blockId, deltaY) => {
-        if (!blockId) return;
-        displacements[blockId] = (displacements[blockId] || 0) + deltaY;
-    };
-
-    const draggedChainHeight = calculateChainHeight(draggedBlockId);
-
-    const directParentBlock = appState.blockSpace[snapInfo.parentId];
-    const isSnappingInLoop = directParentBlock?.sizes?.some(s => s.loop) &&
-                            snapInfo.parentSnapPoint.name.startsWith('topInner');
-
-    // CASE A: We are snapping inside a loop.
-    if (isSnappingInLoop) {
-        const loopBlock = directParentBlock;
-        const innerSnapName = snapInfo.parentSnapPoint.name;
-
-        // Part 1: Displace the blocks already inside THIS active loop branch.
-        if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
-            const insertionDeltaY = draggedChainHeight * APP_SCALE;
-            addDisplacement(snapInfo.originalChildId, insertionDeltaY);
-        }
-
-        // Part 2: Handle the visual expansion of the loop body and displacement of blocks BELOW it.
-        const previewSizes = JSON.parse(JSON.stringify(loopBlock.sizes));
-        const branchIndex = parseInt(innerSnapName.replace('topInner', ''));
-        const loopBranch = previewSizes[branchIndex];
-
-        if (loopBranch) {
-            const oldLoopHeight = loopBlock.sizes[branchIndex].loop.height;
-            const existingChainHeight = calculateChainHeight(loopBlock.children[innerSnapName]);
-            const newLoopHeight = Math.max(existingChainHeight + draggedChainHeight, MIN_LOOP_HEIGHT);
-
-            if (newLoopHeight !== oldLoopHeight) {
-                // Update the loop height in our temporary size object for the preview.
-                loopBranch.loop.height = newLoopHeight;
-
-                // --- THE CORE FIX ---
-                // Instead of calculating delta from heights, calculate it from the change
-                // in the 'bottom' snap point's position. This correctly reflects the
-                // overall change in the block's shape.
-
-                const originalBottomSnap = loopBlock.snapPoints.find(p => p.name === 'bottom');
-                const previewShapeData = blocks.Block(loopBlock.type, loopBlock.colors, previewSizes);
-                const newBottomSnap = previewShapeData.snapPoints.find(p => p.name === 'bottom');
-
-                if (originalBottomSnap && newBottomSnap) {
-                    const loopExpansionDeltaY = (newBottomSnap.y - originalBottomSnap.y) * APP_SCALE;
-                    // ONLY displace the block attached to the bottom of the entire loop.
-                    // Do NOT displace the contents of other branches.
-                    addDisplacement(loopBlock.children.bottom, loopExpansionDeltaY);
-                }
-
-                // Re-render the loop block itself with the temporary, expanded shape.
-                generateShape(loopBlock.uuid, loopBlock.type, loopBlock.colors, previewSizes);
-            }
-        }
-    }
-    // CASE B: Standard insertion (not inside a loop).
-    else if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
-        const insertionDeltaY = draggedChainHeight * APP_SCALE;
-        addDisplacement(snapInfo.originalChildId, insertionDeltaY);
-    }
-
-    // 3. Convert the displacement map to the array format expected by draggable.js
-    const finalDisplacements = Object.entries(displacements).map(([id, deltaY]) => ({ id, deltaY }));
-
-    return finalDisplacements.length > 0 ? { displacedBlocks: finalDisplacements } : null;
-}
-
-function onSnapPreviewEnd(snapInfo) {
-    if (snapInfo.parentId) {
-        const directParent = appState.blockSpace[snapInfo.parentId];
-        if (directParent) {
-             generateShape(directParent.uuid, directParent.type, directParent.colors, directParent.sizes);
-        }
-        const ancestorInfo = findAncestorLoop(snapInfo.parentId, appState.blockSpace);
-        if (ancestorInfo?.loopBlock) {
-            const loopBlock = ancestorInfo.loopBlock;
-            generateShape(loopBlock.uuid, loopBlock.type, loopBlock.colors, loopBlock.sizes);
-        }
-    }
-}
-
 function handleDetach(childId, shouldRender = true) {
     const childBlock = appState.blockSpace[childId];
     if (!childBlock || !childBlock.parent) return;
@@ -525,7 +416,8 @@ function main() {
 
     setupWorkspaceViewBox();
     setupEventListeners();
-    drag.makeDraggable(dom.workSpace, appState.blockSpace, onDragEnd, handleDetach, onSnapPreview, onSnapPreviewEnd);
+    // Updated call: removed onSnapPreview and onSnapPreviewEnd
+    drag.makeDraggable(dom.workSpace, appState.blockSpace, onDragEnd, handleDetach);
 
     createBlock("hat");
 }
