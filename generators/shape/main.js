@@ -341,7 +341,6 @@ function onSnapPreview(snapInfo, draggedBlockId) {
 
     const draggedChainHeight = calculateChainHeight(draggedBlockId);
 
-    // 1. Determine if we are snapping inside a loop FIRST.
     const directParentBlock = appState.blockSpace[snapInfo.parentId];
     const isSnappingInLoop = directParentBlock?.sizes?.some(s => s.loop) &&
                             snapInfo.parentSnapPoint.name.startsWith('topInner');
@@ -351,13 +350,13 @@ function onSnapPreview(snapInfo, draggedBlockId) {
         const loopBlock = directParentBlock;
         const innerSnapName = snapInfo.parentSnapPoint.name;
 
-        // Part 1: Displace the blocks already inside this loop branch to make room.
+        // Part 1: Displace the blocks already inside THIS active loop branch.
         if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
-            const insertionDeltaY = draggedChainHeight * APP_SCALE * constants.BLOCK_HEIGHT;
+            const insertionDeltaY = draggedChainHeight * APP_SCALE;
             addDisplacement(snapInfo.originalChildId, insertionDeltaY);
         }
 
-        // Part 2: Handle the visual expansion of the loop body itself.
+        // Part 2: Handle the visual expansion of the loop body and displacement of blocks BELOW it.
         const previewSizes = JSON.parse(JSON.stringify(loopBlock.sizes));
         const branchIndex = parseInt(innerSnapName.replace('topInner', ''));
         const loopBranch = previewSizes[branchIndex];
@@ -368,25 +367,33 @@ function onSnapPreview(snapInfo, draggedBlockId) {
             const newLoopHeight = Math.max(existingChainHeight + draggedChainHeight, MIN_LOOP_HEIGHT);
 
             if (newLoopHeight !== oldLoopHeight) {
+                // Update the loop height in our temporary size object for the preview.
                 loopBranch.loop.height = newLoopHeight;
+
+                // --- THE CORE FIX ---
+                // Instead of calculating delta from heights, calculate it from the change
+                // in the 'bottom' snap point's position. This correctly reflects the
+                // overall change in the block's shape.
+
+                const originalBottomSnap = loopBlock.snapPoints.find(p => p.name === 'bottom');
+                const previewShapeData = blocks.Block(loopBlock.type, loopBlock.colors, previewSizes);
+                const newBottomSnap = previewShapeData.snapPoints.find(p => p.name === 'bottom');
+
+                if (originalBottomSnap && newBottomSnap) {
+                    const loopExpansionDeltaY = (newBottomSnap.y - originalBottomSnap.y) * APP_SCALE;
+                    // ONLY displace the block attached to the bottom of the entire loop.
+                    // Do NOT displace the contents of other branches.
+                    addDisplacement(loopBlock.children.bottom, loopExpansionDeltaY);
+                }
+
+                // Re-render the loop block itself with the temporary, expanded shape.
                 generateShape(loopBlock.uuid, loopBlock.type, loopBlock.colors, previewSizes);
-
-                // This delta pushes down blocks attached to the BOTTOM of the loop.
-                const loopExpansionDeltaY = (newLoopHeight - oldLoopHeight) * APP_SCALE * constants.BLOCK_HEIGHT;
-                addDisplacement(loopBlock.children.bottom, loopExpansionDeltaY);
-
-                // Also push down other inner branches if they exist (for multi-branch loops).
-                loopBlock.sizes.forEach((_, i) => {
-                    if (i === branchIndex) return;
-                    const otherBranchSnapName = 'topInner' + i;
-                    addDisplacement(loopBlock.children[otherBranchSnapName], loopExpansionDeltaY);
-                });
             }
         }
     }
     // CASE B: Standard insertion (not inside a loop).
     else if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
-        const insertionDeltaY = draggedChainHeight * APP_SCALE * constants.BLOCK_HEIGHT;
+        const insertionDeltaY = draggedChainHeight * APP_SCALE;
         addDisplacement(snapInfo.originalChildId, insertionDeltaY);
     }
 
