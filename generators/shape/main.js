@@ -353,7 +353,7 @@ function onSnapPreview(snapInfo, draggedBlockId) {
 
         // Part 1: Displace the blocks already inside this loop branch to make room.
         if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
-            const insertionDeltaY = draggedChainHeight * APP_SCALE;
+            const insertionDeltaY = draggedChainHeight * APP_SCALE * constants.BLOCK_HEIGHT;
             addDisplacement(snapInfo.originalChildId, insertionDeltaY);
         }
 
