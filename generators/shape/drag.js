@@ -16,15 +16,14 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
 
     // --- Drag State ---
     let isDragging = false;
-    let selectedElement = null; // The main SVG element being dragged
-    let dragGroup = []; // Array of {id, el, relativeOffset} for the whole group
-    let offset = { x: 0, y: 0 }; // Mouse offset from the top-left of the main dragged element
+    let selectedElement = null;
+    let dragGroup = [];
+    let offset = { x: 0, y: 0 };
 
-    // --- Snap State ---
-    let currentSnapTarget = null; // The active snap info object
-    let displacedChainInfo = null; // Info about a chain displaced by an 'insertion' preview
-    // For displacements caused by external events, like a loop expanding.
-    let externallyDisplacedChainInfo = null;
+    // --- Snap State (Simplified) ---
+    let currentSnapTarget = null;
+    // A single list for all blocks displaced during a preview (by insertion, loop expansion, etc.)
+    let previewDisplacedBlocks = null;
     let snapPointVisualizerGroup = null;
 
 
@@ -44,7 +43,7 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         return ctm ? pt.matrixTransform(ctm.inverse()) : { x: 0, y: 0 };
     }
 
-    // --- Snap Preview Logic ---
+    // --- Snap Preview Logic (Simplified) ---
 
     function handleSnapLeave() {
         if (!currentSnapTarget) return;
@@ -53,22 +52,9 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
             onSnapPreviewEnd(currentSnapTarget);
         }
 
-        // Revert insertion displacement
-        if (displacedChainInfo) {
-            const groupToRevert = getDragGroup(displacedChainInfo.id, allBlocks);
-            groupToRevert.forEach(blockId => {
-                const blockEl = document.getElementById(blockId);
-                const originalTransform = allBlocks[blockId].transform;
-                if (blockEl) {
-                    blockEl.setAttribute('x', originalTransform.x);
-                    blockEl.setAttribute('y', originalTransform.y);
-                }
-            });
-        }
-
-        // Revert external displacement (from loop expansion)
-        if (externallyDisplacedChainInfo) {
-            externallyDisplacedChainInfo.forEach(displacement => {
+        // Revert all preview displacements from a single source of truth.
+        if (previewDisplacedBlocks) {
+            previewDisplacedBlocks.forEach(displacement => {
                 const groupToRevert = getDragGroup(displacement.id, allBlocks);
                 groupToRevert.forEach(blockId => {
                     const blockEl = document.getElementById(blockId);
@@ -81,30 +67,28 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
             });
         }
 
-
-        // Clear the state
+        // Clear all state
         currentSnapTarget = null;
-        displacedChainInfo = null;
-        externallyDisplacedChainInfo = null; // Clear new state
+        previewDisplacedBlocks = null;
     }
 
     function handleSnapEnter(newSnapInfo) {
         currentSnapTarget = newSnapInfo;
 
-        // Capture return value from onSnapPreview
+        // Let main.js calculate all necessary visual changes for the preview.
         if (onSnapPreview) {
             const previewResult = onSnapPreview(newSnapInfo, selectedElement.id);
 
-            // If the preview resulted in other blocks needing to move (e.g. loop expanded)
+            // If the preview resulted in blocks needing to move, apply those changes.
             if (previewResult && previewResult.displacedBlocks) {
-                externallyDisplacedChainInfo = previewResult.displacedBlocks; // Store for cleanup
-                externallyDisplacedChainInfo.forEach(displacement => {
+                previewDisplacedBlocks = previewResult.displacedBlocks; // Store for cleanup
+                previewDisplacedBlocks.forEach(displacement => {
                     const groupToMove = getDragGroup(displacement.id, allBlocks);
                     groupToMove.forEach(blockId => {
                         const blockEl = document.getElementById(blockId);
                         const originalTransform = allBlocks[blockId].transform;
                         if (blockEl) {
-                            // Only Y is changed, but setting both is safer.
+                            // The delta is now calculated entirely by main.js
                             blockEl.setAttribute('x', originalTransform.x);
                             blockEl.setAttribute('y', originalTransform.y + displacement.deltaY);
                         }
@@ -112,38 +96,8 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
                 });
             }
         }
-
-        // For 'insertion' snaps, also visually displace the existing chain.
-        // This logic is separate and can happen at the same time as the above.
-        if (newSnapInfo.snapType === 'insertion' && newSnapInfo.originalChildId) {
-            const displacedBlock = allBlocks[newSnapInfo.originalChildId];
-            const draggedBlock = allBlocks[selectedElement.id];
-
-            if (displacedBlock && draggedBlock) {
-                displacedChainInfo = { id: newSnapInfo.originalChildId };
-                const draggedBottomPoint = draggedBlock.snapPoints.find(p => p.role === 'male' && p.name === 'bottom');
-                const displacedTopPoint = displacedBlock.snapPoints.find(p => p.role === 'female');
-
-                if (draggedBottomPoint && displacedTopPoint) {
-                    const snappedDraggedPos = newSnapInfo.position;
-                    const newX = snappedDraggedPos.x + (draggedBottomPoint.x * main.APP_SCALE) - (displacedTopPoint.x * main.APP_SCALE);
-                    const newY = snappedDraggedPos.y + (draggedBottomPoint.y * main.APP_SCALE) - (displacedTopPoint.y * main.APP_SCALE);
-                    
-                    const deltaX = newX - displacedBlock.transform.x;
-                    const deltaY = newY - displacedBlock.transform.y;
-
-                    const groupToMove = getDragGroup(newSnapInfo.originalChildId, allBlocks);
-                    groupToMove.forEach(blockId => {
-                        const blockEl = document.getElementById(blockId);
-                        const originalTransform = allBlocks[blockId].transform;
-                        if (blockEl) {
-                            blockEl.setAttribute('x', originalTransform.x + deltaX);
-                            blockEl.setAttribute('y', originalTransform.y + deltaY);
-                        }
-                    });
-                }
-            }
-        }
+        // NOTE: The specific logic for 'insertion' displacement has been removed from here
+        // and is now handled comprehensively by onSnapPreview in main.js.
     }
 
 
@@ -158,20 +112,18 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         isDragging = true;
         selectedElement = target;
 
-        // Detach from parent in the data model
         const blockData = allBlocks[selectedElement.id];
         if (blockData && blockData.parent && onDetach) {
             onDetach(selectedElement.id);
         }
 
-        // Assemble the group of elements to be dragged
         const mainBlockStartPos = blockData.transform || { x: 0, y: 0 };
         const dragGroupIds = getDragGroup(selectedElement.id, allBlocks);
         dragGroup = dragGroupIds.map(id => {
             const el = document.getElementById(id);
             const currentBlockData = allBlocks[id];
             if (el && currentBlockData?.transform) {
-                svgContainer.appendChild(el); // Bring to front
+                svgContainer.appendChild(el);
                 return {
                     id: id,
                     el: el,
@@ -186,14 +138,12 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
 
         selectedElement.classList.add('active');
 
-        // Calculate initial mouse offset
         const startPoint = getSVGCoordinates(event);
         offset.x = startPoint.x - mainBlockStartPos.x;
         offset.y = startPoint.y - mainBlockStartPos.y;
 
         createSnapVisualizers();
         
-        // Add listeners
         window.addEventListener('mousemove', drag);
         window.addEventListener('mouseup', endDrag);
         window.addEventListener('touchmove', drag, { passive: false });
