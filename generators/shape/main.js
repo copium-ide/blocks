@@ -345,7 +345,7 @@ function onSnapPreview(snapInfo, draggedBlockId) {
         // This is the corrected line. The block unit height is now properly
         // scaled to SVG coordinate space units (pixels).
         const insertionDeltaY = draggedChainHeight * APP_SCALE;
-        addDisplacement(snapInfo.originalChildId, insertionDeltaY);
+        addDisplacement(snapInfo.originalChildId, insertionDeltaY*APP_SCALE);
     }
 
     // 2. Handle displacement from loop expansion.
