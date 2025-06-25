@@ -336,9 +336,12 @@ function onSnapPreview(snapInfo, draggedBlockId) {
 
 function onSnapPreviewEnd(snapInfo) {
     if (snapInfo.parentId) {
-        // This will now be called whenever a snap preview ends,
-        // correctly recalculating the parent's height based on its actual children.
-        updateLoopBranchHeight(snapInfo.parentId);
+        // This will now be called whenever a snap preview ends (e.g., a block is
+        // dragged away from a snap point), correctly recalculating the parent's
+        // height based on its actual children.
+        // Passing `null` as the context ensures we are not in preview mode
+        // and that the block's data model is updated via editBlock.
+        updateLoopBranchHeight(snapInfo.parentId, null);
     }
 }
 

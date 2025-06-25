@@ -80,12 +80,13 @@ export function makeDraggable(svgContainer, allBlocks, onDragEnd, onDetach, onSn
         
         currentSnapTarget = newSnapInfo;
 
-        // Notify main app to start a preview. This works for ALL snap types.
+        // Notify main app to start a preview (e.g., expand a loop).
+        // This is called for ALL snap types ('append' and 'insertion').
         if (onSnapPreview) {
             onSnapPreview(newSnapInfo, selectedElement.id);
         }
 
-        // If it's an 'insertion' snap, we also need to visually displace the existing chain.
+        // For 'insertion' snaps, also visually displace the existing chain.
         if (newSnapInfo.snapType === 'insertion' && newSnapInfo.originalChildId) {
             const displacedBlock = allBlocks[newSnapInfo.originalChildId];
             const draggedBlock = allBlocks[selectedElement.id];
