@@ -95,7 +95,7 @@ function calculateChainHeight(startBlockId) {
         const currentBlock = appState.blockSpace[currentBlockId];
         currentBlockId = currentBlock?.children['bottom'];
     }
-    return totalHeight* APP_SCALE;
+    return totalHeight;
 }
 
 function recalculateAllLayouts() {
