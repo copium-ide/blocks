@@ -332,8 +332,6 @@ function removeBlock(uuid) {
 function onSnapPreview(snapInfo, draggedBlockId) {
     if (!snapInfo.parentId) return null;
 
-    // Use a map to accumulate displacements for each block. This correctly handles
-    // cases where a block is affected by multiple movements (e.g., insertion and loop expansion).
     const displacements = {};
     const addDisplacement = (blockId, deltaY) => {
         if (!blockId) return;
@@ -343,8 +341,9 @@ function onSnapPreview(snapInfo, draggedBlockId) {
     const draggedChainHeight = calculateChainHeight(draggedBlockId);
 
     // 1. Handle displacement from insertion.
-    // The block being pushed down moves by the full height of the dragged chain.
     if (snapInfo.snapType === 'insertion' && snapInfo.originalChildId) {
+        // *** THIS IS THE FIX ***
+        // The height must be scaled by APP_SCALE to convert it to SVG units.
         const insertionDeltaY = draggedChainHeight * APP_SCALE;
         addDisplacement(snapInfo.originalChildId, insertionDeltaY);
     }
@@ -381,10 +380,8 @@ function onSnapPreview(snapInfo, draggedBlockId) {
 
                 const loopExpansionDeltaY = (newLoopHeight - oldLoopHeight) * APP_SCALE;
 
-                // Displace the block at the bottom of the loop
                 addDisplacement(loopBlock.children.bottom, loopExpansionDeltaY);
 
-                // Displace blocks in other branches
                 loopBlock.sizes.forEach((_, i) => {
                     if (i === branchIndex) return;
                     const otherBranchSnapName = 'topInner' + i;
