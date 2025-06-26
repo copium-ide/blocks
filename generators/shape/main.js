@@ -273,32 +273,32 @@ function renderSelectedBlockControls() {
 
             // =================================================================
             // --- BUG FIX STARTS HERE ---
-            // The old method of creating one giant label was fragile.
-            // This new method creates separate, explicit elements and is more robust.
+            // This is the robust way to create the lock UI to prevent duplicates.
             
             const div = document.createElement('div');
             div.className = 'connection-item';
 
-            // 1. Create the descriptive text part
+            // Part 1: The descriptive text
             const textSpan = document.createElement('span');
             textSpan.innerHTML = `<b>${point.name}</b> → ${childName}`;
-            div.appendChild(textSpan);
-            div.appendChild(document.createElement('br')); // Add line break
+            
+            // Part 2: The interactive lock control, wrapped in a label
+            const lockLabel = document.createElement('label');
+            lockLabel.style.display = 'inline-block'; // Override global styles
+            lockLabel.style.width = 'auto';
+            lockLabel.style.cursor = 'pointer';
 
-            // 2. Create the checkbox with a unique ID
             const lockCheckbox = document.createElement('input');
             lockCheckbox.type = 'checkbox';
             lockCheckbox.checked = connection.locked;
             lockCheckbox.dataset.pointName = point.name;
-            const checkboxId = `lock-${currentBlock.uuid}-${point.name}`;
-            lockCheckbox.id = checkboxId;
-            div.appendChild(lockCheckbox);
+            
+            lockLabel.appendChild(lockCheckbox);
+            lockLabel.appendChild(document.createTextNode(' Locked'));
 
-            // 3. Create a label linked explicitly to the checkbox via the 'for' attribute
-            const lockLabel = document.createElement('label');
-            lockLabel.setAttribute('for', checkboxId);
-            lockLabel.textContent = ' Locked';
-            lockLabel.style.cursor = 'pointer'; // Improve UX
+            // Assemble the final element
+            div.appendChild(textSpan);
+            div.appendChild(document.createElement('br'));
             div.appendChild(lockLabel);
 
             dom.connectionsList.appendChild(div);

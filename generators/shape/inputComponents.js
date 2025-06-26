@@ -12,13 +12,12 @@ export function input(colors, size, type) {
     // Initialize with points and the default MALE output snap point.
     const shape = {
         points: [],
-        snapPoints: [{ x: 0, y: dheight / 2, type: type, role: 'male', name: 'output' }],
+        // --- FIX: Changed x from 0 to -1 to place it on the far-left edge ---
+        snapPoints: [{ x: -1, y: dheight / 2, type: type, role: 'male', name: 'output' }],
         ...footer(colors)
     };
 
-    // --- NEW LOGIC ---
-    // 1. Custom Snap Points: Check for and add custom FEMALE snap points.
-    // These are for plugging other value blocks *into* this one.
+    // Custom FEMALE snap points for plugging other values *into* this one.
     if (sizes.customSnapPoints && Array.isArray(sizes.customSnapPoints)) {
         sizes.customSnapPoints.forEach(customPoint => {
             shape.snapPoints.push({
@@ -30,7 +29,6 @@ export function input(colors, size, type) {
             });
         });
     }
-    // --- END NEW LOGIC ---
  
     switch (type) {
         case 'number':
