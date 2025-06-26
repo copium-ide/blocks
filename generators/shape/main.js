@@ -142,7 +142,7 @@ function render() {
     recalculateAllLayouts();
     renderBlocks();
     populateSelector();
-    renderSelectedBlockControls(); // Replaces renderDimensionSliders
+    renderSelectedBlockControls();
 }
 
 function generateShape(uuid, type, colors, sizes) {
@@ -182,7 +182,8 @@ function renderBlocks() {
 
 function populateSelector() {
     if (!dom.uuidinput) return;
-    const currentVal = dom.uuidinput.value;
+    
+    const currentTargetId = appState.targetID;
     clearNode(dom.uuidinput);
 
     for (const key in appState.blockSpace) {
@@ -191,10 +192,12 @@ function populateSelector() {
         option.textContent = `${appState.blockSpace[key].type} (${key.substring(0, 8)})`;
         dom.uuidinput.appendChild(option);
     }
-    dom.uuidinput.value = appState.blockSpace[currentVal] ? currentVal : (appState.targetID || '');
+
+    if (currentTargetId) {
+        dom.uuidinput.value = currentTargetId;
+    }
 }
 
-// 3. Refactored Control Panel: New comprehensive render function
 function renderSelectedBlockControls() {
     clearNode(dom.slidersContainer);
     clearNode(dom.connectionsList);
@@ -268,25 +271,39 @@ function renderSelectedBlockControls() {
             const childBlock = appState.blockSpace[connection.id];
             const childName = childBlock ? `${childBlock.type} (${childBlock.uuid.substring(0, 4)})` : '...';
 
+            // =================================================================
+            // --- BUG FIX STARTS HERE ---
+            // The old method of creating one giant label was fragile.
+            // This new method creates separate, explicit elements and is more robust.
+            
             const div = document.createElement('div');
             div.className = 'connection-item';
-            
-            const label = document.createElement('label');
-            label.innerHTML = `<b>${point.name}</b> → ${childName} <br>`;
-            
+
+            // 1. Create the descriptive text part
+            const textSpan = document.createElement('span');
+            textSpan.innerHTML = `<b>${point.name}</b> → ${childName}`;
+            div.appendChild(textSpan);
+            div.appendChild(document.createElement('br')); // Add line break
+
+            // 2. Create the checkbox with a unique ID
             const lockCheckbox = document.createElement('input');
             lockCheckbox.type = 'checkbox';
             lockCheckbox.checked = connection.locked;
             lockCheckbox.dataset.pointName = point.name;
-            lockCheckbox.id = `lock-${currentBlock.uuid}-${point.name}`;
+            const checkboxId = `lock-${currentBlock.uuid}-${point.name}`;
+            lockCheckbox.id = checkboxId;
+            div.appendChild(lockCheckbox);
 
-            const lockLabel = document.createElement('span');
+            // 3. Create a label linked explicitly to the checkbox via the 'for' attribute
+            const lockLabel = document.createElement('label');
+            lockLabel.setAttribute('for', checkboxId);
             lockLabel.textContent = ' Locked';
-            
-            label.appendChild(lockCheckbox);
-            label.appendChild(lockLabel);
-            div.appendChild(label);
+            lockLabel.style.cursor = 'pointer'; // Improve UX
+            div.appendChild(lockLabel);
+
             dom.connectionsList.appendChild(div);
+            // --- BUG FIX ENDS HERE ---
+            // =================================================================
         }
     });
 
@@ -478,7 +495,6 @@ function setupEventListeners() {
         });
     }
 
-    // 2. Lockable Connections: Event listener for lock toggles
     if (dom.connectionsList) {
         dom.connectionsList.addEventListener('change', (event) => {
             if (event.target.type === 'checkbox' && appState.targetID) {
@@ -486,7 +502,6 @@ function setupEventListeners() {
                 const block = appState.blockSpace[appState.targetID];
                 if (block && block.children[pointName]) {
                     block.children[pointName].locked = event.target.checked;
-                    // No re-render needed, UI state is already correct.
                 }
             }
         });
@@ -535,7 +550,6 @@ function main() {
 
     setupWorkspaceViewBox();
     setupEventListeners();
-    // Pass the new onSelect handler to the drag logic
     drag.makeDraggable(dom.workSpace, appState.blockSpace, handleSnap, handleDetach, handleSelect);
 
     createBlock("hat");
