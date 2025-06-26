@@ -4,13 +4,51 @@ function getDragGroup(blockId, allBlocks) {
     let group = [blockId];
     const block = allBlocks[blockId];
     if (block && block.children) {
-        // Updated to handle the new children structure: { id: '...', locked: ... }
         for (const connection of Object.values(block.children)) {
             group = group.concat(getDragGroup(connection.id, allBlocks));
         }
     }
     return group;
 }
+
+/**
+ * Traverses up the hierarchy from a given block to find the highest-level
+ * block that is part of a continuous chain of locked connections.
+ * @param {string} blockId The ID of the block to start from.
+ * @param {object} allBlocks The map of all blocks in the workspace.
+ * @returns {string} The ID of the "root" block for the drag operation.
+ */
+function findDragRoot(blockId, allBlocks) {
+    const block = allBlocks[blockId];
+    // If there's no parent, this block is the root.
+    if (!block || !block.parent) {
+        return blockId;
+    }
+
+    const parentBlock = allBlocks[block.parent];
+    if (!parentBlock || !parentBlock.children) {
+        // Data inconsistency, treat this block as the root.
+        return blockId;
+    }
+
+    // Find the connection object in the parent's children to check its locked status.
+    let isLocked = false;
+    for (const connection of Object.values(parentBlock.children)) {
+        if (connection.id === blockId) {
+            isLocked = connection.locked;
+            break;
+        }
+    }
+
+    // If the connection to the parent is locked, recurse up to find the parent's root.
+    // Otherwise, this block is the root of the drag.
+    if (isLocked) {
+        return findDragRoot(parentBlock.uuid, allBlocks);
+    } else {
+        return blockId;
+    }
+}
+
 
 export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelect) {
     const SNAP_RADIUS = 100;
@@ -48,40 +86,36 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
     function startDrag(event) {
         if (event.type === 'mousedown' && event.button !== 0) return;
 
-        const target = event.target.closest('svg[blocktype]');
-        if (!target || !svgContainer.contains(target)) return;
+        const clickedElement = event.target.closest('svg[blocktype]');
+        if (!clickedElement || !svgContainer.contains(clickedElement)) return;
 
-        // 4. Click-to-Select: Immediately select the block on mousedown.
+        // Always select the block that was actually clicked.
         if (onSelect) {
-            onSelect(target.id);
+            onSelect(clickedElement.id);
         }
 
-        const blockData = allBlocks[target.id];
-
-        // 2. Lockable Connections: Check if the connection to the parent is locked.
-        if (blockData && blockData.parent) {
-            const parentBlock = allBlocks[blockData.parent];
-            if (parentBlock && parentBlock.children) {
-                for (const connection of Object.values(parentBlock.children)) {
-                    if (connection.id === target.id && connection.locked) {
-                        // If locked, prevent the drag from starting.
-                        return;
-                    }
-                }
-            }
-        }
+        // --- NEW LOGIC: Determine the true root of the drag ---
+        // If a locked block is clicked, we drag its parent instead.
+        const dragRootId = findDragRoot(clickedElement.id, allBlocks);
+        const dragRootElement = document.getElementById(dragRootId);
+        if (!dragRootElement) return;
+        // --- END NEW LOGIC ---
 
         isDragging = true;
-        selectedElement = target;
+        // The `selectedElement` is the root of the drag operation.
+        selectedElement = dragRootElement; 
         
         restorableConnection = null;
         currentSnapTarget = null;
 
+        const blockData = allBlocks[selectedElement.id];
+        // Detach the entire group (starting from the root) if it has a parent.
         if (blockData && blockData.parent) {
             onDetach(selectedElement.id, null, true);
         }
 
         const mainBlockStartPos = blockData.transform || { x: 0, y: 0 };
+        // The drag group is calculated from the root.
         const dragGroupIds = getDragGroup(selectedElement.id, allBlocks);
         dragGroup = dragGroupIds.map(id => {
             const el = document.getElementById(id);
