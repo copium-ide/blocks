@@ -66,14 +66,15 @@
     <div id="controls-container">
         <a href="https://discord.gg/33TUH3pxnP" target="_blank" style="text-align: center;">join my server now! :3</a>
         <hr>
+        <!-- App Scale Slider Added Here -->
+        <div>
+            <label for="appScaleSlider">Global Scale: <span id="appScaleValue">8</span></label>
+            <input type="range" id="appScaleSlider" min="2" max="16" step="1" value="8">
+        </div>
+        <hr>
         <div id="controls">
-            <div id="main-sliders">
-                <label>Main Height:</label>
-                <input id="h" type="range" min="0.5" max="10" step="0.1" value="1" />
-                <label>Main Width:</label>
-                <input id="w" type="range" min="0.5" max="10" step="0.1" value="1" />
-            </div>
-            <hr>
+            <!-- Removed the old main height/width sliders as they are now per-branch -->
+            <div id="main-sliders" style="display: none;"></div>
             <div>
                 <label>Colors:</label>
                 <input id="color1" type="color" value="#4A90E2" />

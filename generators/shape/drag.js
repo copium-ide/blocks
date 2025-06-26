@@ -23,7 +23,6 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
     // --- Snap State ---
     let currentSnapTarget = null;
     let snapPointVisualizerGroup = null;
-    // This tracks the connection broken by an insertion, so it can be restored.
     let restorableConnection = null;
 
 
@@ -54,13 +53,12 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
         isDragging = true;
         selectedElement = target;
         
-        // Clear any leftover state from a previous drag.
         restorableConnection = null;
         currentSnapTarget = null;
 
         const blockData = allBlocks[selectedElement.id];
         if (blockData && blockData.parent) {
-            onDetach(selectedElement.id, null, true); // Detach without restoring anything
+            onDetach(selectedElement.id, null, true);
         }
 
         const mainBlockStartPos = blockData.transform || { x: 0, y: 0 };
@@ -115,7 +113,6 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
                                  currentSnapTarget.parentSnapPoint.name === newSnapInfo.parentSnapPoint.name;
 
             if (!isSameTarget) {
-                // If we are about to make an insertion, save the connection we're breaking.
                 if (newSnapInfo.snapType === 'insertion') {
                     restorableConnection = {
                         childId: newSnapInfo.originalChildId,
@@ -128,13 +125,11 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
             }
         } else {
             if (currentSnapTarget) {
-                // We were snapped, but now we're not. Detach and restore the old connection if one exists.
                 onDetach(selectedElement.id, restorableConnection, true);
                 currentSnapTarget = null;
-                restorableConnection = null; // The connection has been restored, so clear it.
+                restorableConnection = null;
             }
             
-            // Make the block follow the mouse.
             dragGroup.forEach(item => {
                 const newPos = { x: mouseDrivenPos.x + item.relativeOffset.x, y: mouseDrivenPos.y + item.relativeOffset.y };
                 item.el.setAttribute('x', newPos.x);
@@ -175,7 +170,9 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
     // --- Utility and Visualizer Functions ---
 
     function checkForSnap(draggedBlockId, currentPos, dragGroupIds) {
-        const effectiveSnapRadius = SNAP_RADIUS / main.APP_SCALE;
+        // Use the getter function for scale
+        const scale = main.getAppScale();
+        const effectiveSnapRadius = SNAP_RADIUS / scale;
         const draggedBlockData = allBlocks[draggedBlockId];
         
         if (!draggedBlockData || !draggedBlockData.snapPoints) return null;
@@ -194,8 +191,8 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
             for (const staticMalePoint of staticBlockData.snapPoints.filter(p => p.role === 'male')) {
                 if (draggedFemalePoint.type !== staticMalePoint.type) continue;
 
-                const targetX = staticBlockData.transform.x + (staticMalePoint.x * main.APP_SCALE) - (draggedFemalePoint.x * main.APP_SCALE);
-                const targetY = staticBlockData.transform.y + (staticMalePoint.y * main.APP_SCALE) - (draggedFemalePoint.y * main.APP_SCALE);
+                const targetX = staticBlockData.transform.x + (staticMalePoint.x * scale) - (draggedFemalePoint.x * scale);
+                const targetY = staticBlockData.transform.y + (staticMalePoint.y * scale) - (draggedFemalePoint.y * scale);
                 const distance = Math.sqrt(Math.pow(currentPos.x - targetX, 2) + Math.pow(currentPos.y - targetY, 2));
 
                 if (distance < effectiveSnapRadius && distance < closestSnap.distance) {
@@ -220,18 +217,20 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
         snapPointVisualizerGroup.setAttribute('id', 'snap-visualizers');
         snapPointVisualizerGroup.style.pointerEvents = 'none';
         svgContainer.appendChild(snapPointVisualizerGroup);
-        const circleRadius = 5 / main.APP_SCALE;
+        
+        // Use the getter function for scale
+        const scale = main.getAppScale();
+        const circleRadius = 5 / scale;
         const dragGroupIds = dragGroup.map(item => item.id);
 
-        // Render male snap points on static blocks
         for (const blockId in allBlocks) {
             if (dragGroupIds.includes(blockId)) continue;
             const blockData = allBlocks[blockId];
             if (!blockData.snapPoints || !blockData.transform) continue;
             blockData.snapPoints.forEach((point) => {
                 if (point.role === 'male') {
-                    const cx = blockData.transform.x + (point.x * main.APP_SCALE);
-                    const cy = blockData.transform.y + (point.y * main.APP_SCALE);
+                    const cx = blockData.transform.x + (point.x * scale);
+                    const cy = blockData.transform.y + (point.y * scale);
                     const isOccupied = blockData.children && blockData.children[point.name];
                     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                     circle.setAttribute('cx', cx);
@@ -243,7 +242,6 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
             });
         }
         
-        // Render female snap points on the currently dragged block
         const draggedBlockData = allBlocks[selectedElement.id];
         if (draggedBlockData && draggedBlockData.snapPoints) {
             draggedBlockData.snapPoints.forEach(point => {
@@ -251,7 +249,7 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
                     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                     circle.setAttribute('r', circleRadius);
                     circle.setAttribute('fill', 'rgba(255, 100, 100, 0.8)');
-                    circle.dataset.blockId = selectedElement.id; // Tag it for updates
+                    circle.dataset.blockId = selectedElement.id;
                     snapPointVisualizerGroup.appendChild(circle);
                 }
             });
@@ -265,12 +263,13 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
         if (!blockData || !blockData.snapPoints) return;
         const femalePoints = blockData.snapPoints.filter(p => p.role === 'female');
         
+        // Use the getter function for scale
+        const scale = main.getAppScale();
         activeCircles.forEach((circle, index) => {
             const point = femalePoints[index];
             if (point) {
-                circle.setAttribute('cx', newBlockPos.x + (point.x * main.APP_SCALE));
-                // *** THIS IS THE FIX: Corrected variable name ***
-                circle.setAttribute('cy', newBlockPos.y + (point.y * main.APP_SCALE));
+                circle.setAttribute('cx', newBlockPos.x + (point.x * scale));
+                circle.setAttribute('cy', newBlockPos.y + (point.y * scale));
             }
         });
     }

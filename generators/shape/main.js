@@ -4,7 +4,8 @@ import * as drag from './drag.js';
 import * as constants from './blockComponents.js';
 
 // --- Configuration ---
-export const APP_SCALE = 8;
+let appScale = 8; // Changed from const to let
+export function getAppScale() { return appScale; } // Export a getter
 const MIN_LOOP_HEIGHT = 0.5;
 
 // --- DOM Element References ---
@@ -16,12 +17,14 @@ function getElements() {
         addBranchBtn: document.getElementById('addBranch'),
         createBtn: document.getElementById('create'),
         removeBtn: document.getElementById('remove'),
-        hinput: document.getElementById("h"),
-        winput: document.getElementById("w"),
+        // Removed h and w inputs as they are now per-branch
         typeinput: document.getElementById("type"),
         uuidinput: document.getElementById("blockType"),
         color1input: document.getElementById("color1"),
         color2input: document.getElementById("color2"),
+        // Added new slider elements
+        appScaleSlider: document.getElementById('appScaleSlider'),
+        appScaleValue: document.getElementById('appScaleValue'),
     };
 }
 const dom = getElements();
@@ -113,8 +116,10 @@ function recalculateAllLayouts() {
             const childFemalePoint = childBlock.snapPoints.find(p => p.role === 'female');
             if (!parentMalePoint || !childFemalePoint) continue;
 
-            childBlock.transform.x = block.transform.x + (parentMalePoint.x * APP_SCALE) - (childFemalePoint.x * APP_SCALE);
-            childBlock.transform.y = block.transform.y + (parentMalePoint.y * APP_SCALE) - (childFemalePoint.y * APP_SCALE);
+            // Use the getter function for scale
+            const scale = getAppScale();
+            childBlock.transform.x = block.transform.x + (parentMalePoint.x * scale) - (childFemalePoint.x * scale);
+            childBlock.transform.y = block.transform.y + (parentMalePoint.y * scale) - (childFemalePoint.y * scale);
 
             updateChain(childId);
         }
@@ -137,7 +142,8 @@ function generateShape(uuid, type, colors, sizes) {
     const shapeData = blocks.Block(type, colors, sizes);
     const blockElm = document.getElementById(uuid);
     if (blockElm) {
-        svg.generate(blockElm, shapeData, APP_SCALE);
+        // Use the getter function for scale
+        svg.generate(blockElm, shapeData, getAppScale());
     }
 }
 
@@ -312,10 +318,8 @@ function handleDetach(childId, restorableConnection, shouldRender = true) {
     const childBlock = appState.blockSpace[childId];
     if (!childBlock || !childBlock.parent) return;
 
-    // Detach the dragged block
     setParent(childId, null, null);
 
-    // If an insertion was broken, restore the original connection
     if (restorableConnection) {
         setParent(restorableConnection.childId, restorableConnection.parentId, restorableConnection.snapPointName);
     }
@@ -351,6 +355,18 @@ function handleSnap(draggedBlockId, finalTransform, snapInfo) {
 
 function setupEventListeners() {
     window.addEventListener('resize', setupWorkspaceViewBox);
+
+    // Add listener for the new scale slider
+    if (dom.appScaleSlider) {
+        dom.appScaleSlider.addEventListener('input', () => {
+            const newScale = parseInt(dom.appScaleSlider.value, 10);
+            appScale = newScale;
+            if (dom.appScaleValue) {
+                dom.appScaleValue.textContent = newScale;
+            }
+            render(); // Re-render everything with the new scale
+        });
+    }
 
     if (dom.slidersContainer) {
         dom.slidersContainer.addEventListener('input', (event) => {
