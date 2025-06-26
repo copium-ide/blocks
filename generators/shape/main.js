@@ -4,25 +4,29 @@ import * as drag from './drag.js';
 import * as constants from './blockComponents.js';
 
 // --- Configuration ---
-let appScale = 8; // Changed from const to let
-export function getAppScale() { return appScale; } // Export a getter
+let appScale = 8;
+export function getAppScale() { return appScale; }
 const MIN_LOOP_HEIGHT = 0.5;
 
 // --- DOM Element References ---
 function getElements() {
     return {
         workSpace: document.getElementById('workspace'),
+        // Control Panel Sections
+        blockSelectorPanel: document.getElementById('block-selector-panel'),
+        blockPropertiesPanel: document.getElementById('block-properties-panel'),
+        connectionPropertiesPanel: document.getElementById('connection-properties-panel'),
+        creationPanel: document.getElementById('creation-panel'),
+        // Controls
         slidersContainer: document.getElementById("sliders"),
-        mainSliders: document.getElementById('main-sliders'),
+        connectionsList: document.getElementById('connections-list'),
         addBranchBtn: document.getElementById('addBranch'),
         createBtn: document.getElementById('create'),
         removeBtn: document.getElementById('remove'),
-        // Removed h and w inputs as they are now per-branch
         typeinput: document.getElementById("type"),
         uuidinput: document.getElementById("blockType"),
         color1input: document.getElementById("color1"),
         color2input: document.getElementById("color2"),
-        // Added new slider elements
         appScaleSlider: document.getElementById('appScaleSlider'),
         appScaleValue: document.getElementById('appScaleValue'),
     };
@@ -53,8 +57,9 @@ function getDragGroup(blockId, allBlocks, group = []) {
     group.push(blockId);
     const block = allBlocks[blockId];
     if (block && block.children) {
-        for (const childId of Object.values(block.children)) {
-            getDragGroup(childId, allBlocks, group);
+        // Updated for new children structure
+        for (const connection of Object.values(block.children)) {
+            getDragGroup(connection.id, allBlocks, group);
         }
     }
     return group;
@@ -75,7 +80,8 @@ function calculateChainHeight(startBlockId) {
     while (currentBlockId) {
         totalHeight += getBlockVisualHeight(currentBlockId);
         const currentBlock = appState.blockSpace[currentBlockId];
-        currentBlockId = currentBlock?.children['bottom'];
+        // Updated for new children structure
+        currentBlockId = currentBlock?.children['bottom']?.id;
     }
     return totalHeight;
 }
@@ -93,7 +99,8 @@ function recalculateAllLayouts() {
             for (let i = 0; i < newSizes.length; i++) {
                 const branch = newSizes[i];
                 if (branch.loop) {
-                    const innerChainStartId = block.children['topInner' + i];
+                    // Updated for new children structure
+                    const innerChainStartId = block.children['topInner' + i]?.id;
                     const newLoopHeight = calculateChainHeight(innerChainStartId) || MIN_LOOP_HEIGHT;
                     if (branch.loop.height !== newLoopHeight) {
                         branch.loop.height = newLoopHeight;
@@ -108,7 +115,8 @@ function recalculateAllLayouts() {
         }
 
         for (const snapPointName in block.children) {
-            const childId = block.children[snapPointName];
+            // Updated for new children structure
+            const childId = block.children[snapPointName].id;
             const childBlock = appState.blockSpace[childId];
             if (!childBlock) continue;
 
@@ -116,7 +124,6 @@ function recalculateAllLayouts() {
             const childFemalePoint = childBlock.snapPoints.find(p => p.role === 'female');
             if (!parentMalePoint || !childFemalePoint) continue;
 
-            // Use the getter function for scale
             const scale = getAppScale();
             childBlock.transform.x = block.transform.x + (parentMalePoint.x * scale) - (childFemalePoint.x * scale);
             childBlock.transform.y = block.transform.y + (parentMalePoint.y * scale) - (childFemalePoint.y * scale);
@@ -134,15 +141,14 @@ function recalculateAllLayouts() {
 function render() {
     recalculateAllLayouts();
     renderBlocks();
-    renderDimensionSliders();
     populateSelector();
+    renderSelectedBlockControls(); // Replaces renderDimensionSliders
 }
 
 function generateShape(uuid, type, colors, sizes) {
     const shapeData = blocks.Block(type, colors, sizes);
     const blockElm = document.getElementById(uuid);
     if (blockElm) {
-        // Use the getter function for scale
         svg.generate(blockElm, shapeData, getAppScale());
     }
 }
@@ -188,26 +194,33 @@ function populateSelector() {
     dom.uuidinput.value = appState.blockSpace[currentVal] ? currentVal : (appState.targetID || '');
 }
 
-function renderDimensionSliders() {
-    if (!dom.slidersContainer) return;
+// 3. Refactored Control Panel: New comprehensive render function
+function renderSelectedBlockControls() {
     clearNode(dom.slidersContainer);
+    clearNode(dom.connectionsList);
+
     const currentBlock = appState.blockSpace[appState.targetID];
+
     if (!currentBlock) {
-        if (dom.mainSliders) dom.mainSliders.style.display = 'none';
-        if (dom.addBranchBtn) dom.addBranchBtn.style.display = 'none';
+        dom.blockPropertiesPanel.style.display = 'none';
+        dom.connectionPropertiesPanel.style.display = 'none';
         return;
     }
+
+    // --- Populate Block Properties Panel ---
+    dom.blockPropertiesPanel.style.display = 'block';
+    dom.typeinput.value = currentBlock.type;
+    dom.color1input.value = currentBlock.colors.inner;
+    dom.color2input.value = currentBlock.colors.outer;
 
     const { type, sizes } = currentBlock;
     const isBranchBlock = ['block', 'hat', 'end'].includes(type);
 
-    if (dom.mainSliders) dom.mainSliders.style.display = isBranchBlock ? 'block' : 'none';
-    if (dom.addBranchBtn) dom.addBranchBtn.style.display = isBranchBlock ? 'block' : 'none';
+    dom.addBranchBtn.style.display = isBranchBlock ? 'block' : 'none';
 
     sizes.forEach((branch, index) => {
         const branchDiv = document.createElement("div");
         branchDiv.className = "branch-slider";
-
         const header = document.createElement('h4');
         header.textContent = isBranchBlock ? `Branch ${index + 1}` : 'Dimensions';
         branchDiv.appendChild(header);
@@ -243,12 +256,51 @@ function renderDimensionSliders() {
         }
         dom.slidersContainer.appendChild(branchDiv);
     });
+
+    // --- Populate Connection Properties Panel ---
+    const maleSnapPoints = currentBlock.snapPoints.filter(p => p.role === 'male');
+    let connectionCount = 0;
+
+    maleSnapPoints.forEach(point => {
+        const connection = currentBlock.children[point.name];
+        if (connection) {
+            connectionCount++;
+            const childBlock = appState.blockSpace[connection.id];
+            const childName = childBlock ? `${childBlock.type} (${childBlock.uuid.substring(0, 4)})` : '...';
+
+            const div = document.createElement('div');
+            div.className = 'connection-item';
+            
+            const label = document.createElement('label');
+            label.innerHTML = `<b>${point.name}</b> → ${childName} <br>`;
+            
+            const lockCheckbox = document.createElement('input');
+            lockCheckbox.type = 'checkbox';
+            lockCheckbox.checked = connection.locked;
+            lockCheckbox.dataset.pointName = point.name;
+            lockCheckbox.id = `lock-${currentBlock.uuid}-${point.name}`;
+
+            const lockLabel = document.createElement('span');
+            lockLabel.textContent = ' Locked';
+            
+            label.appendChild(lockCheckbox);
+            label.appendChild(lockLabel);
+            div.appendChild(label);
+            dom.connectionsList.appendChild(div);
+        }
+    });
+
+    if (connectionCount > 0) {
+        dom.connectionPropertiesPanel.style.display = 'block';
+    } else {
+        dom.connectionPropertiesPanel.style.display = 'none';
+    }
 }
 
 
 // --- Core Application Logic / "Actions" ---
 
-function setParent(childId, newParentId, parentSnapPointName) {
+function setParent(childId, newParentId, parentSnapPointName, isLocked = false) {
     const childBlock = appState.blockSpace[childId];
     if (!childBlock) return;
 
@@ -256,7 +308,7 @@ function setParent(childId, newParentId, parentSnapPointName) {
     if (oldParentId && appState.blockSpace[oldParentId]) {
         const oldParent = appState.blockSpace[oldParentId];
         for (const pointName in oldParent.children) {
-            if (oldParent.children[pointName] === childId) {
+            if (oldParent.children[pointName].id === childId) {
                 delete oldParent.children[pointName];
                 break;
             }
@@ -265,7 +317,10 @@ function setParent(childId, newParentId, parentSnapPointName) {
 
     childBlock.parent = newParentId;
     if (newParentId && parentSnapPointName && appState.blockSpace[newParentId]) {
-        appState.blockSpace[newParentId].children[parentSnapPointName] = childId;
+        appState.blockSpace[newParentId].children[parentSnapPointName] = {
+            id: childId,
+            locked: isLocked
+        };
     }
 }
 
@@ -284,7 +339,25 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
     let uuid;
     do { uuid = crypto.randomUUID(); } while (appState.blockSpace.hasOwnProperty(uuid));
 
-    const sizes = [{ height: 1, width: 1, loop: { height: MIN_LOOP_HEIGHT } }];
+    const isBranch = ['block', 'hat', 'end'].includes(type);
+    let customPoints = [];
+
+    if (isBranch) {
+        // Example for a 'block' type, will create a MALE snap point
+        customPoints = [{ name: 'value_out', x: 12, type: 'number' }];
+    } else if (type === 'string') {
+        // Example for a 'string' type, will create a FEMALE snap point
+        customPoints = [{ name: 'length_in', x: 5, type: 'number' }];
+    }
+
+    const sizes = [{ 
+        height: 1, 
+        width: 1, 
+        // Only branch blocks have loops
+        loop: isBranch ? { height: MIN_LOOP_HEIGHT } : undefined,
+        customSnapPoints: customPoints
+    }];
+
     const blockData = blocks.Block(type, colors, sizes);
 
     appState.blockSpace[uuid] = {
@@ -300,7 +373,7 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
 
 function removeBlock(uuid) {
     if (!appState.blockSpace[uuid]) return;
-    handleDetach(uuid, null, false); // Don't render yet
+    handleDetach(uuid, null, false);
     const groupToRemove = getDragGroup(uuid, appState.blockSpace, []);
 
     groupToRemove.forEach(id => delete appState.blockSpace[id]);
@@ -314,6 +387,13 @@ function removeBlock(uuid) {
 
 // --- Drag and Drop Handlers ---
 
+function handleSelect(blockId) {
+    if (appState.targetID !== blockId) {
+        appState.targetID = blockId;
+        render();
+    }
+}
+
 function handleDetach(childId, restorableConnection, shouldRender = true) {
     const childBlock = appState.blockSpace[childId];
     if (!childBlock || !childBlock.parent) return;
@@ -321,7 +401,12 @@ function handleDetach(childId, restorableConnection, shouldRender = true) {
     setParent(childId, null, null);
 
     if (restorableConnection) {
-        setParent(restorableConnection.childId, restorableConnection.parentId, restorableConnection.snapPointName);
+        setParent(
+            restorableConnection.childId, 
+            restorableConnection.parentId, 
+            restorableConnection.snapPointName,
+            restorableConnection.locked // Restore with locked state
+        );
     }
 
     if (shouldRender) {
@@ -338,14 +423,20 @@ function handleSnap(draggedBlockId, finalTransform, snapInfo) {
 
     if (snapInfo) {
         if (snapInfo.snapType === 'insertion') {
-            const { parentId, originalChildId, parentSnapPoint } = snapInfo;
+            const { parentId, parentSnapPoint } = snapInfo;
+            const parentBlock = appState.blockSpace[parentId];
+            const originalConnection = parentBlock.children[parentSnapPoint.name];
+
             const draggedBlockBottomPoint = mainDraggedBlock.snapPoints.find(p => p.role === 'male' && p.name === 'bottom');
             if (draggedBlockBottomPoint) {
-                setParent(originalChildId, draggedBlockId, draggedBlockBottomPoint.name);
-                setParent(draggedBlockId, parentId, parentSnapPoint.name);
+                // Connect original child to bottom of dragged block, preserving its locked state
+                setParent(originalConnection.id, draggedBlockId, draggedBlockBottomPoint.name, originalConnection.locked);
+                // Connect dragged block to parent, unlocked by default
+                setParent(draggedBlockId, parentId, parentSnapPoint.name, false);
             }
         } else if (snapInfo.snapType === 'append') {
-            setParent(draggedBlockId, snapInfo.parentId, snapInfo.parentSnapPoint.name);
+            // Connect dragged block to parent, unlocked by default
+            setParent(draggedBlockId, snapInfo.parentId, snapInfo.parentSnapPoint.name, false);
         }
     }
     render();
@@ -356,15 +447,11 @@ function handleSnap(draggedBlockId, finalTransform, snapInfo) {
 function setupEventListeners() {
     window.addEventListener('resize', setupWorkspaceViewBox);
 
-    // Add listener for the new scale slider
     if (dom.appScaleSlider) {
         dom.appScaleSlider.addEventListener('input', () => {
-            const newScale = parseInt(dom.appScaleSlider.value, 10);
-            appScale = newScale;
-            if (dom.appScaleValue) {
-                dom.appScaleValue.textContent = newScale;
-            }
-            render(); // Re-render everything with the new scale
+            appScale = parseInt(dom.appScaleSlider.value, 10);
+            if (dom.appScaleValue) dom.appScaleValue.textContent = appScale;
+            render();
         });
     }
 
@@ -391,6 +478,20 @@ function setupEventListeners() {
         });
     }
 
+    // 2. Lockable Connections: Event listener for lock toggles
+    if (dom.connectionsList) {
+        dom.connectionsList.addEventListener('change', (event) => {
+            if (event.target.type === 'checkbox' && appState.targetID) {
+                const pointName = event.target.dataset.pointName;
+                const block = appState.blockSpace[appState.targetID];
+                if (block && block.children[pointName]) {
+                    block.children[pointName].locked = event.target.checked;
+                    // No re-render needed, UI state is already correct.
+                }
+            }
+        });
+    }
+
     const controls = [dom.color1input, dom.color2input, dom.typeinput];
     controls.forEach(input => {
         if (!input) return;
@@ -407,12 +508,6 @@ function setupEventListeners() {
     if (dom.uuidinput) {
         dom.uuidinput.addEventListener("change", () => {
             appState.targetID = dom.uuidinput.value;
-            const block = appState.blockSpace[appState.targetID];
-            if (block) {
-                dom.typeinput.value = block.type;
-                dom.color1input.value = block.colors.inner;
-                dom.color2input.value = block.colors.outer;
-            }
             render();
         });
     }
@@ -440,7 +535,8 @@ function main() {
 
     setupWorkspaceViewBox();
     setupEventListeners();
-    drag.makeDraggable(dom.workSpace, appState.blockSpace, handleSnap, handleDetach);
+    // Pass the new onSelect handler to the drag logic
+    drag.makeDraggable(dom.workSpace, appState.blockSpace, handleSnap, handleDetach, handleSelect);
 
     createBlock("hat");
 }

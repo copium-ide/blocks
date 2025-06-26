@@ -8,17 +8,34 @@ export const STROKE_WIDTH = 0.25;
 const NOTCH_CONNECT_X = 4;
 
 export function branch(colors, sizes, top, bottom) {
-    // Initialize with points and snapPoints arrays
     const finalShape = {points: [], snapPoints: [], ...footer(colors)};
+    let finalOffset = 0;
 
-    // This block is from your original code.
+    // 1. Custom Snap Points: Helper function to add custom points for a given branch.
+    const addCustomSnaps = (branchIndex, yOffset) => {
+        const size = sizes[branchIndex];
+        if (size.customSnapPoints && Array.isArray(size.customSnapPoints)) {
+            // Y position is vertically centered on the main part of the branch.
+            const yPos = yOffset + (size.height * BLOCK_HEIGHT / 2);
+            size.customSnapPoints.forEach(customPoint => {
+                finalShape.snapPoints.push({
+                    x: customPoint.x,
+                    y: yPos,
+                    type: customPoint.type,
+                    role: 'male',
+                    name: customPoint.name
+                });
+            });
+        }
+    };
+
+    // This block is for single-branch blocks.
     if (sizes.length === 1) {
         if (top === 'notch') {
             finalShape.points.push(
                 {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
                 ...notch(0, 0, true),
             );
-            // Add the female snap point for the top notch
             finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: 0, type: 'block', role: 'female', name: 'top'});
         } else if (top === 'hat') {
             finalShape.points.push(
@@ -29,12 +46,12 @@ export function branch(colors, sizes, top, bottom) {
                 {x: 0, y: 0, cornerRadius: CORNER_RADIUS},
             );
         }
+        addCustomSnaps(0, 0); // Add custom snaps for the only branch
     }
-    let finalOffset = 0;
   
-    // This is your original loop for multi-branch blocks.
+    // This is the loop for multi-branch blocks.
     for (let i = 0; i < sizes.length-1; i++) {
-      let shape = []; // Changed from `let shape;` to avoid potential errors
+      let shape = [];
       const size = sizes[i];
       const dHeight = size.height * BLOCK_HEIGHT;
       const dWidth = size.width * BLOCK_WIDTH;
@@ -53,7 +70,6 @@ export function branch(colors, sizes, top, bottom) {
                 ...block(0, dWidth, dHeight),
                 ...loop(0 + offset+dHeight, bHeight),
             ];
-            // Add the female snap point for the top notch (only on the first branch)
             finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: 0, type: 'block', role: 'female', name: 'top'});
         } else if (top === 'hat') {
             shape = [
@@ -75,25 +91,26 @@ export function branch(colors, sizes, top, bottom) {
         ];
       }
       
-      // Add snap points for the C-shaped loop
-      // A male snap point inside the loop to connect a nested stack.
+      addCustomSnaps(i, offset); // Add custom snaps for the current branch
       finalShape.snapPoints.push({ x: LOOP_OFFSET + NOTCH_CONNECT_X, y: offset + dHeight, type: 'block', role: 'male', name: 'topInner'+i});
   
       finalShape.points.push(...shape);
       finalOffset = offset + dHeight + bHeight;
     }
 
-    // This is your original logic for the last branch in the stack.
+    // This is the logic for the last branch in the stack.
     let lastShape = [];
     let dHeight = sizes[sizes.length-1].height * BLOCK_HEIGHT;
     let dWidth = sizes[sizes.length-1].width * BLOCK_WIDTH;
+    
+    addCustomSnaps(sizes.length - 1, finalOffset); // Add custom snaps for the last branch
+
     if (bottom === 'notch') {
         lastShape = [
             ...block(finalOffset, dWidth, dHeight),
             ...notch(0, 0 + finalOffset+dHeight, false),
             {x: 0, y: 0 + finalOffset+dHeight, cornerRadius: CORNER_RADIUS},
         ];
-        // Add the male snap point for the bottom notch
         finalShape.snapPoints.push({ x: NOTCH_CONNECT_X, y: finalOffset + dHeight, type: 'block', role: 'male', name: 'bottom'});
     } else if (bottom === 'flat') {
         lastShape = [

@@ -8,10 +8,10 @@
     body, html {
       margin: 0;
       padding: 0;
-      overflow: hidden; /* Prevent scrollbars */
+      overflow: hidden;
       background-color: #e0e0e0;
+      font-family: sans-serif;
     }
-    /* The "mother SVG" fills the entire screen */
     #workspace {
       position: absolute;
       top: 0;
@@ -19,7 +19,6 @@
       width: 100vw;
       height: 100vh;
     }
-    /* The controls panel floats on top of the workspace */
     #controls-container {
       position: absolute;
       top: 10px;
@@ -39,6 +38,11 @@
       box-sizing: border-box;
       margin-bottom: 8px;
     }
+    #controls-container h3 {
+        margin-top: 0;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 5px;
+    }
     hr { margin: 15px 0; border: 1px solid #eee; border-top: none; }
     .branch-slider {
       border: 1px solid #ccc;
@@ -46,7 +50,36 @@
       margin: 10px 0;
       border-radius: 4px;
     }
-    /* Child SVGs (the blocks) are positioned absolutely within the parent */
+    .branch-slider h4 { margin: 0 0 10px 0; }
+    .remove-branch {
+        float: right;
+        width: 25px !important;
+        height: 25px;
+        padding: 0;
+        line-height: 25px;
+        margin: -5px -5px 0 0 !important;
+        background: #fdd;
+        border: 1px solid #f00;
+        color: #f00;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+    .connection-item {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-bottom: 5px;
+    }
+    .connection-item label {
+        margin: 0;
+        display: inline-block;
+        width: auto;
+    }
+    .connection-item input[type="checkbox"] {
+        width: auto;
+        display: inline-block;
+        vertical-align: middle;
+    }
     svg[blocktype] {
         overflow: visible;
         cursor: grab;
@@ -60,47 +93,53 @@
 </head>
 <body>
     
-    <!-- This is the "mother SVG" -->
     <svg id="workspace"></svg>
 
     <div id="controls-container">
         <a href="https://discord.gg/33TUH3pxnP" target="_blank" style="text-align: center;">join my server now! :3</a>
         <hr>
-        <!-- App Scale Slider Added Here -->
         <div>
-            <label for="appScaleSlider">Global Scale: <span id="appScaleValue">6</span></label>
-            <input type="range" id="appScaleSlider" min="2" max="16" step="1" value="6">
+            <label for="appScaleSlider">Global Scale: <span id="appScaleValue">8</span></label>
+            <input type="range" id="appScaleSlider" min="2" max="16" step="1" value="8">
         </div>
         <hr>
-        <div id="controls">
-            <!-- Removed the old main height/width sliders as they are now per-branch -->
-            <div id="main-sliders" style="display: none;"></div>
-            <div>
-                <label>Colors:</label>
-                <input id="color1" type="color" value="#4A90E2" />
-                <input id="color2" type="color" value="#196ECF" />
-            </div>
-            <hr>
-            <div>
-                <label>Block Type:</label>
-                <select id="type">
-                    <option>hat</option>
-                    <option>block</option>
-                    <option>end</option>
-                    <option>number</option>
-                    <option>string</option>
-                    <option>boolean</option>
-                </select>
-            </div>
-            <div>
-                <label>Selected Block:</label>
-                <select id="blockType"></select>
-            </div>
-            <hr>
-            <input id="create" type="button" value="Create New Block" />
-            <input id="remove" type="button" value="Remove Selected" />
+
+        <!-- 3. Refactored Control Panel -->
+        <div id="block-selector-panel">
+            <h3>Selected Block</h3>
+            <select id="blockType"></select>
+            <button id="remove">Remove Selected</button>
+        </div>
+        <hr>
+
+        <div id="block-properties-panel" style="display: none;">
+            <h3>Block Properties</h3>
+            <label>Block Type:</label>
+            <select id="type">
+                <option>hat</option>
+                <option>block</option>
+                <option>end</option>
+                <option>number</option>
+                <option>string</option>
+                <option>boolean</option>
+            </select>
+            <label>Colors:</label>
+            <input id="color1" type="color" value="#4A90E2" />
+            <input id="color2" type="color" value="#196ECF" />
             <div id="sliders"></div>
-            <button id="addBranch">Add Branch</button>
+            <button id="addBranch" style="display: none;">Add Branch</button>
+        </div>
+        <hr>
+
+        <div id="connection-properties-panel" style="display: none;">
+            <h3>Connections</h3>
+            <div id="connections-list"></div>
+        </div>
+        <hr>
+
+        <div id="creation-panel">
+            <h3>Create New</h3>
+            <button id="create">Create New Block</button>
         </div>
     </div>
 

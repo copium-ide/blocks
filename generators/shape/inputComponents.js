@@ -9,13 +9,28 @@ export function input(colors, size, type) {
     const dheight = sizes.height * INPUT_HEIGHT;
     const dwidth = sizes.width * INPUT_WIDTH;
     
-    // Initialize with points and snapPoints.
+    // Initialize with points and the default MALE output snap point.
     const shape = {
         points: [],
-        snapPoints: [{ x: 0, y: dheight / 2, type: type, role: 'male' }],
+        snapPoints: [{ x: 0, y: dheight / 2, type: type, role: 'male', name: 'output' }],
         ...footer(colors)
     };
 
+    // --- NEW LOGIC ---
+    // 1. Custom Snap Points: Check for and add custom FEMALE snap points.
+    // These are for plugging other value blocks *into* this one.
+    if (sizes.customSnapPoints && Array.isArray(sizes.customSnapPoints)) {
+        sizes.customSnapPoints.forEach(customPoint => {
+            shape.snapPoints.push({
+                x: customPoint.x,      // User-defined X
+                y: dheight / 2,        // Vertically centered
+                type: customPoint.type,
+                role: 'female',        // Role is 'female' for an input slot
+                name: customPoint.name
+            });
+        });
+    }
+    // --- END NEW LOGIC ---
  
     switch (type) {
         case 'number':

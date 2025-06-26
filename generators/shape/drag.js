@@ -4,14 +4,15 @@ function getDragGroup(blockId, allBlocks) {
     let group = [blockId];
     const block = allBlocks[blockId];
     if (block && block.children) {
-        for (const childId of Object.values(block.children)) {
-            group = group.concat(getDragGroup(childId, allBlocks));
+        // Updated to handle the new children structure: { id: '...', locked: ... }
+        for (const connection of Object.values(block.children)) {
+            group = group.concat(getDragGroup(connection.id, allBlocks));
         }
     }
     return group;
 }
 
-export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
+export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelect) {
     const SNAP_RADIUS = 100;
 
     // --- Drag State ---
@@ -50,13 +51,32 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
         const target = event.target.closest('svg[blocktype]');
         if (!target || !svgContainer.contains(target)) return;
 
+        // 4. Click-to-Select: Immediately select the block on mousedown.
+        if (onSelect) {
+            onSelect(target.id);
+        }
+
+        const blockData = allBlocks[target.id];
+
+        // 2. Lockable Connections: Check if the connection to the parent is locked.
+        if (blockData && blockData.parent) {
+            const parentBlock = allBlocks[blockData.parent];
+            if (parentBlock && parentBlock.children) {
+                for (const connection of Object.values(parentBlock.children)) {
+                    if (connection.id === target.id && connection.locked) {
+                        // If locked, prevent the drag from starting.
+                        return;
+                    }
+                }
+            }
+        }
+
         isDragging = true;
         selectedElement = target;
         
         restorableConnection = null;
         currentSnapTarget = null;
 
-        const blockData = allBlocks[selectedElement.id];
         if (blockData && blockData.parent) {
             onDetach(selectedElement.id, null, true);
         }
@@ -114,10 +134,13 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
 
             if (!isSameTarget) {
                 if (newSnapInfo.snapType === 'insertion') {
+                    const parentBlock = allBlocks[newSnapInfo.parentId];
+                    const originalConnection = parentBlock.children[newSnapInfo.parentSnapPoint.name];
                     restorableConnection = {
-                        childId: newSnapInfo.originalChildId,
+                        childId: originalConnection.id,
                         parentId: newSnapInfo.parentId,
-                        snapPointName: newSnapInfo.parentSnapPoint.name
+                        snapPointName: newSnapInfo.parentSnapPoint.name,
+                        locked: originalConnection.locked // Preserve locked state
                     };
                 }
                 onSnap(selectedElement.id, newSnapInfo.position, newSnapInfo);
@@ -170,7 +193,6 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
     // --- Utility and Visualizer Functions ---
 
     function checkForSnap(draggedBlockId, currentPos, dragGroupIds) {
-        // Use the getter function for scale
         const scale = main.getAppScale();
         const effectiveSnapRadius = SNAP_RADIUS / scale;
         const draggedBlockData = allBlocks[draggedBlockId];
@@ -203,7 +225,6 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
                         snapType: isOccupied ? 'insertion' : 'append',
                         parentId: staticBlockId,
                         parentSnapPoint: staticMalePoint,
-                        ...(isOccupied && { originalChildId: staticBlockData.children[staticMalePoint.name] })
                     };
                 }
             }
@@ -218,7 +239,6 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
         snapPointVisualizerGroup.style.pointerEvents = 'none';
         svgContainer.appendChild(snapPointVisualizerGroup);
         
-        // Use the getter function for scale
         const scale = main.getAppScale();
         const circleRadius = 5 / scale;
         const dragGroupIds = dragGroup.map(item => item.id);
@@ -263,7 +283,6 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach) {
         if (!blockData || !blockData.snapPoints) return;
         const femalePoints = blockData.snapPoints.filter(p => p.role === 'female');
         
-        // Use the getter function for scale
         const scale = main.getAppScale();
         activeCircles.forEach((circle, index) => {
             const point = femalePoints[index];
