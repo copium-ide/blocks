@@ -345,6 +345,23 @@ function editBlock(uuid, updates) {
     const block = appState.blockSpace[uuid];
     if (!block) return;
 
+    // When changing type, ensure the sizes array is consistent with the new type.
+    if (updates.type && updates.type !== block.type) {
+        const newTypeIsBranch = ['block', 'hat', 'end'].includes(updates.type);
+        const newSizes = block.sizes.map(s => {
+            const newSize = { ...s };
+            if (newTypeIsBranch) {
+                if (!newSize.loop) {
+                    newSize.loop = { height: MIN_LOOP_HEIGHT };
+                }
+            } else {
+                delete newSize.loop;
+            }
+            return newSize;
+        });
+        block.sizes = newSizes;
+    }
+
     Object.assign(block, updates);
     if (updates.sizes || updates.type) {
         block.snapPoints = blocks.Block(block.type, block.colors, block.sizes).snapPoints;
