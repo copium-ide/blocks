@@ -227,8 +227,7 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
     // --- Utility and Visualizer Functions ---
 
     function checkForSnap(draggedBlockId, currentPos, dragGroupIds) {
-        const scale = main.getAppScale();
-        const effectiveSnapRadius = SNAP_RADIUS / scale;
+        const effectiveSnapRadius = SNAP_RADIUS;
         const draggedBlockData = allBlocks[draggedBlockId];
         
         if (!draggedBlockData || !draggedBlockData.snapPoints) return null;
