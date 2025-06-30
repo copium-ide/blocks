@@ -51,7 +51,7 @@ function findDragRoot(blockId, allBlocks) {
 
 
 export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelect) {
-    const SNAP_RADIUS = 25 * main.getAppScale();
+    const SNAP_RADIUS = 25 / main.getAppScale();
 
     // --- Drag State ---
     let isDragging = false;
