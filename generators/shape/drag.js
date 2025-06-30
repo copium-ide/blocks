@@ -274,7 +274,7 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
         svgContainer.appendChild(snapPointVisualizerGroup);
         
         const scale = main.getAppScale();
-        const circleRadius = 5 / scale;
+        const circleRadius = 5 * scale;
         const dragGroupIds = dragGroup.map(item => item.id);
 
         for (const blockId in allBlocks) {
