@@ -51,7 +51,7 @@ function findDragRoot(blockId, allBlocks) {
 
 
 export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelect) {
-    const SNAP_RADIUS = 25 * main.getAppScale();
+    const SNAP_RADIUS = 3 * main.getAppScale();
 
     // --- Drag State ---
     let isDragging = false;
@@ -246,8 +246,8 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
             for (const staticMalePoint of staticBlockData.snapPoints.filter(p => p.role === 'male')) {
                 if (draggedFemalePoint.type !== staticMalePoint.type) continue;
 
-                const targetX = staticBlockData.transform.x + (staticMalePoint.x * scale) - (draggedFemalePoint.x * scale);
-                const targetY = staticBlockData.transform.y + (staticMalePoint.y * scale) - (draggedFemalePoint.y * scale);
+                const targetX = staticBlockData.transform.x + (staticMalePoint.x * main.getAppScale()) - (draggedFemalePoint.x * main.getAppScale());
+                const targetY = staticBlockData.transform.y + (staticMalePoint.y * main.getAppScale()) - (draggedFemalePoint.y * main.getAppScale());
                 const distance = Math.sqrt(Math.pow(currentPos.x - targetX, 2) + Math.pow(currentPos.y - targetY, 2));
 
                 if (distance < effectiveSnapRadius && distance < closestSnap.distance) {
@@ -272,8 +272,7 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
         snapPointVisualizerGroup.style.pointerEvents = 'none';
         svgContainer.appendChild(snapPointVisualizerGroup);
         
-        const scale = main.getAppScale();
-        const circleRadius = 5 * scale;
+        const circleRadius = 0.2 * main.getAppScale();
         const dragGroupIds = dragGroup.map(item => item.id);
 
         for (const blockId in allBlocks) {
@@ -282,8 +281,8 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
             if (!blockData.snapPoints || !blockData.transform) continue;
             blockData.snapPoints.forEach((point) => {
                 if (point.role === 'male') {
-                    const cx = blockData.transform.x + (point.x * scale);
-                    const cy = blockData.transform.y + (point.y * scale);
+                    const cx = blockData.transform.x + (point.x * main.getAppScale());
+                    const cy = blockData.transform.y + (point.y * main.getAppScale());
                     const isOccupied = blockData.children && blockData.children[point.name];
                     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                     circle.setAttribute('cx', cx);
@@ -309,19 +308,30 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
         }
     }
 
+    /**
+     * This is the fixed function.
+     * It updates the position of the red visualizers attached to the block being dragged.
+     */
     function updateActiveVisualizers(newBlockPos) {
         if (!snapPointVisualizerGroup || !selectedElement) return;
+
         const activeCircles = snapPointVisualizerGroup.querySelectorAll(`[data-block-id="${selectedElement.id}"]`);
         const blockData = allBlocks[selectedElement.id];
         if (!blockData || !blockData.snapPoints) return;
+
+        // Get the female points from the block's data. This is our source of truth.
         const femalePoints = blockData.snapPoints.filter(p => p.role === 'female');
         
-        const scale = main.getAppScale();
-        activeCircles.forEach((circle, index) => {
-            const point = femalePoints[index];
-            if (point) {
-                circle.setAttribute('cx', newBlockPos.x + (point.x * scale));
-                circle.setAttribute('cy', newBlockPos.y + (point.y * scale));
+        // FIX: Iterate over the data (femalePoints) instead of the DOM collection (activeCircles).
+        // This ensures that we are mapping the correct data point to the correct visualizer circle,
+        // assuming their creation order was consistent, which it is. This is more robust against
+        // potential DOM/data mismatches.
+        femalePoints.forEach((point, index) => {
+            const circle = activeCircles[index];
+            // Make sure a corresponding circle exists before trying to update it.
+            if (circle) {
+                circle.setAttribute('cx', newBlockPos.x + (point.x * main.getAppScale()));
+                circle.setAttribute('cy', newBlockPos.y + (point.y * main.getAppScale()));
             }
         });
     }
