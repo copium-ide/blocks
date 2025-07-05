@@ -48,10 +48,12 @@ function findDragRoot(blockId, allBlocks) {
         return blockId;
     }
 }
-
+function getSnapRadius() {
+    return 3 * main.getAppScale();
+}
 
 export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelect) {
-    const SNAP_RADIUS = 3 * main.getAppScale();
+    
 
     // --- Drag State ---
     let isDragging = false;
@@ -227,7 +229,7 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
     // --- Utility and Visualizer Functions ---
 
     function checkForSnap(draggedBlockId, currentPos, dragGroupIds) {
-        const effectiveSnapRadius = SNAP_RADIUS;
+        const effectiveSnapRadius = getSnapRadius();
         const draggedBlockData = allBlocks[draggedBlockId];
         
         if (!draggedBlockData || !draggedBlockData.snapPoints) return null;
