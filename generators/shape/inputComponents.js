@@ -13,7 +13,7 @@ export function input(colors, size, type) {
     const shape = {
         points: [],
         // --- FIX: Changed x from 0 to -1 to place it on the far-left edge ---
-        snapPoints: [{ x: -1, y: dheight / 2, type: type, role: 'male', name: 'output' }],
+        snapPoints: [{ x: -1, y: dheight / 2, type: type, role: 'female', name: 'output' }],
         ...footer(colors)
     };
 

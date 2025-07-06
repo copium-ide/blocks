@@ -110,7 +110,8 @@ function recalculateAllLayouts() {
             }
             if (needsSnapPointUpdate) {
                 block.sizes = newSizes;
-                block.snapPoints = blocks.Block(block.type, block.colors, block.sizes).snapPoints;
+                // Re-run editBlock logic to regenerate snapPoints with new loop height
+                editBlock(block.uuid, { sizes: block.sizes });
             }
         }
 
@@ -144,8 +145,22 @@ function render() {
     renderSelectedBlockControls();
 }
 
-function generateShape(uuid, type, colors, sizes) {
+/**
+ * Generates the SVG content for a block using the definitive snap points from the application state.
+ * @param {string} uuid - The block's unique ID.
+ * @param {string} type - The block's type (e.g., 'hat', 'block').
+ * @param {object} colors - The block's colors.
+ * @param {Array<object>} sizes - The sizing data for the block's branches.
+ * @param {Array<object>} snapPoints - The definitive array of snap points for the block.
+ */
+function generateShape(uuid, type, colors, sizes, snapPoints) {
+    // We call Block() to get the main SVG path data.
     const shapeData = blocks.Block(type, colors, sizes);
+    
+    // CRITICAL FIX: We override the snap points from the factory
+    // with the definitive ones from our application state.
+    shapeData.snapPoints = snapPoints;
+
     const blockElm = document.getElementById(uuid);
     if (blockElm) {
         while (blockElm.firstChild) {
@@ -178,7 +193,9 @@ function renderBlocks() {
 
         blockElm.setAttribute('x', blockData.transform.x);
         blockElm.setAttribute('y', blockData.transform.y);
-        generateShape(id, blockData.type, blockData.colors, blockData.sizes);
+        
+        // Pass the definitive snapPoints from the state to generateShape.
+        generateShape(id, blockData.type, blockData.colors, blockData.sizes, blockData.snapPoints);
     }
 }
 
@@ -292,14 +309,11 @@ function renderSelectedBlockControls() {
     dom.connectionPropertiesPanel.style.display = connectionCount > 0 ? 'block' : 'none';
 
     // --- Populate Snap Points Panel ---
-    // --- FIX: Reworked rendering logic to build UI from the source of truth ---
     dom.snapPointsPanel.style.display = 'block';
     
-    // 1. Get the list of default points to display them separately.
     const defaultSizing = currentBlock.sizes.map(s => ({ ...s, customSnapPoints: [] }));
     const defaultPoints = blocks.Block(currentBlock.type, currentBlock.colors, defaultSizing).snapPoints;
 
-    // 2. Render the non-editable, default snap points.
     defaultPoints.forEach(point => {
         const isConnected = !!currentBlock.children[point.name];
         const div = document.createElement('div');
@@ -311,7 +325,6 @@ function renderSelectedBlockControls() {
         dom.snapPointsList.appendChild(div);
     });
 
-    // 3. Render the editable, custom snap points by iterating through the source data.
     currentBlock.sizes.forEach((branch, branchIndex) => {
         if (!branch.customSnapPoints) return;
 
@@ -382,7 +395,6 @@ function renderSelectedBlockControls() {
             dom.snapPointsList.appendChild(div);
         });
     });
-    // --- End of Fix ---
 }
 
 
@@ -442,10 +454,17 @@ function editBlock(uuid, updates) {
     }
 
     if (needsRegeneration) {
-        block.snapPoints = blocks.Block(block.type, block.colors, block.sizes).snapPoints;
-    }
+        // Explicitly build the definitive snapPoints array.
+        // 1. Get the block's default snap points by calling the factory with no custom points.
+        const defaultSizing = block.sizes.map(s => ({ ...s, customSnapPoints: [] }));
+        const defaultPoints = blocks.Block(block.type, block.colors, defaultSizing).snapPoints;
 
-    render();
+        // 2. Get the true custom points directly from the block's sizes property.
+        const customPoints = block.sizes.flatMap(s => s.customSnapPoints || []);
+
+        // 3. Combine them to create the single source of truth for snap points.
+        block.snapPoints = [...defaultPoints, ...customPoints];
+    }
 }
 
 function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
@@ -562,7 +581,16 @@ function setupEventListeners() {
             const value = parseFloat(event.target.value);
             const newSizes = JSON.parse(JSON.stringify(block.sizes));
             newSizes[idx][prop] = value;
+            
             editBlock(appState.targetID, { sizes: newSizes });
+            recalculateAllLayouts();
+            renderBlocks();
+        });
+        
+        dom.slidersContainer.addEventListener('change', (event) => {
+            if (event.target.matches('.branch-input')) {
+                render();
+            }
         });
 
         dom.slidersContainer.addEventListener('click', (event) => {
@@ -572,6 +600,7 @@ function setupEventListeners() {
             if (block.sizes.length > 1) {
                 const newSizes = block.sizes.filter((_, index) => index !== idx);
                 editBlock(appState.targetID, { sizes: newSizes });
+                render(); 
             }
         });
     }
@@ -587,17 +616,18 @@ function setupEventListeners() {
             }
         });
     }
-
+    
     const controls = [dom.color1input, dom.color2input, dom.typeinput];
     controls.forEach(input => {
         if (!input) return;
-        const eventType = input.matches('select') ? 'change' : 'input';
-        input.addEventListener(eventType, () => {
+        input.addEventListener('change', () => {
             if (!appState.targetID) return;
             const updates = {};
             if (input === dom.typeinput) updates.type = dom.typeinput.value;
             else if (input === dom.color1input || input === dom.color2input) updates.colors = { inner: dom.color1input.value, outer: dom.color2input.value };
+            
             editBlock(appState.targetID, updates);
+            render();
         });
     });
 
@@ -614,6 +644,7 @@ function setupEventListeners() {
             const block = appState.blockSpace[appState.targetID];
             const newSizes = [...block.sizes, { height: 1, width: 1, loop: { height: MIN_LOOP_HEIGHT } }];
             editBlock(appState.targetID, { sizes: newSizes });
+            render();
         });
     }
 
@@ -627,12 +658,12 @@ function setupEventListeners() {
             do { i++; newName = `custom_${i}`; } while (block.snapPoints.some(p => p.name === newName));
             newSizes[0].customSnapPoints.push({ name: newName, role: 'male', type: 'any', x: 0, y: 0 });
             editBlock(appState.targetID, { sizes: newSizes });
+            render();
         });
     }
 
     if (dom.snapPointsList) {
-        // Listener for live editing of snap point properties
-        dom.snapPointsList.addEventListener('input', (event) => {
+        dom.snapPointsList.addEventListener('change', (event) => {
             const target = event.target;
             if (!target.matches('.snap-point-input') || !appState.targetID) return;
 
@@ -644,17 +675,16 @@ function setupEventListeners() {
             if (target.type === 'number') value = parseFloat(value);
 
             if (prop === 'name') {
-                const allCustomPointsOnBlock = block.sizes.flatMap(s => s.customSnapPoints || []);
-                const pointBeingEdited = allCustomPointsOnBlock[pointIndex]; // This assumes a flat index, might need refinement for multi-branch
+                const pointBeingEdited = block.sizes[branchIndex]?.customSnapPoints[pointIndex];
+                if (!pointBeingEdited) return;
 
-                const isDuplicate = block.snapPoints.some(p => {
-                    // A name is a duplicate if it matches another point's name,
-                    // AND that point is not the one we are currently editing.
-                    return p.name.toLowerCase() === value.toLowerCase() && p.name.toLowerCase() !== pointBeingEdited.name.toLowerCase();
-                });
+                const isDuplicate = block.snapPoints.some(p => 
+                    p.name.toLowerCase() === value.toLowerCase() && p.name.toLowerCase() !== pointBeingEdited.name.toLowerCase()
+                );
 
                 if (isDuplicate || value.trim() === '') {
                     target.style.outline = '2px solid red';
+                    target.value = pointBeingEdited.name; 
                     return; 
                 } else {
                     target.style.outline = '';
@@ -662,15 +692,23 @@ function setupEventListeners() {
             }
 
             const newSizes = JSON.parse(JSON.stringify(block.sizes));
-            const pointToEdit = newSizes[branchIndex].customSnapPoints[pointIndex];
+            const pointToEdit = newSizes[branchIndex]?.customSnapPoints[pointIndex];
             
             if (pointToEdit) {
                 pointToEdit[prop] = value;
                 editBlock(appState.targetID, { sizes: newSizes });
+
+                // If a dropdown ('role') was changed, do a partial render of only the blocks.
+                if (target.matches('select')) {
+                    recalculateAllLayouts();
+                    renderBlocks();
+                } else {
+                // Otherwise (text/number input), the user has finished editing, so do a full render.
+                    render();
+                }
             }
         });
 
-        // Listener for removing snap points
         dom.snapPointsList.addEventListener('click', (event) => {
             const target = event.target;
             if (!target.matches('.remove-snap-point') || !appState.targetID) return;
@@ -682,6 +720,7 @@ function setupEventListeners() {
             const newSizes = JSON.parse(JSON.stringify(block.sizes));
             newSizes[branchIndex].customSnapPoints.splice(pointIndex, 1);
             editBlock(appState.targetID, { sizes: newSizes });
+            render();
         });
     }
 
