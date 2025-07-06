@@ -30,6 +30,7 @@ function getElements() {
         uuidinput: document.getElementById("blockType"),
         color1input: document.getElementById("color1"),
         color2input: document.getElementById("color2"),
+        textInput: document.getElementById('text-input'), // <-- NEW
         appScaleSlider: document.getElementById('appScaleSlider'),
         appScaleValue: document.getElementById('appScaleValue'),
     };
@@ -110,7 +111,6 @@ function recalculateAllLayouts() {
             }
             if (needsSnapPointUpdate) {
                 block.sizes = newSizes;
-                // Re-run editBlock logic to regenerate snapPoints with new loop height
                 editBlock(block.uuid, { sizes: block.sizes });
             }
         }
@@ -145,28 +145,15 @@ function render() {
     renderSelectedBlockControls();
 }
 
-/**
- * Generates the SVG content for a block using the definitive snap points from the application state.
- * @param {string} uuid - The block's unique ID.
- * @param {string} type - The block's type (e.g., 'hat', 'block').
- * @param {object} colors - The block's colors.
- * @param {Array<object>} sizes - The sizing data for the block's branches.
- * @param {Array<object>} snapPoints - The definitive array of snap points for the block.
- */
-function generateShape(uuid, type, colors, sizes, snapPoints) {
-    // We call Block() to get the main SVG path data.
+// MODIFIED: Accepts text to pass to the svg generator
+function generateShape(uuid, type, colors, sizes, snapPoints, text) {
     const shapeData = blocks.Block(type, colors, sizes);
-    
-    // CRITICAL FIX: We override the snap points from the factory
-    // with the definitive ones from our application state.
     shapeData.snapPoints = snapPoints;
 
     const blockElm = document.getElementById(uuid);
     if (blockElm) {
-        while (blockElm.firstChild) {
-            blockElm.removeChild(blockElm.firstChild);
-        }
-        svg.generate(blockElm, shapeData, getAppScale());
+        // Pass the text to the real SVG generator
+        svg.generate(blockElm, shapeData, text, getAppScale());
     }
 }
 
@@ -194,8 +181,8 @@ function renderBlocks() {
         blockElm.setAttribute('x', blockData.transform.x);
         blockElm.setAttribute('y', blockData.transform.y);
         
-        // Pass the definitive snapPoints from the state to generateShape.
-        generateShape(id, blockData.type, blockData.colors, blockData.sizes, blockData.snapPoints);
+        // MODIFIED: Pass the block's text property
+        generateShape(id, blockData.type, blockData.colors, blockData.sizes, blockData.snapPoints, blockData.text);
     }
 }
 
@@ -236,6 +223,7 @@ function renderSelectedBlockControls() {
     dom.typeinput.value = currentBlock.type;
     dom.color1input.value = currentBlock.colors.inner;
     dom.color2input.value = currentBlock.colors.outer;
+    dom.textInput.value = currentBlock.text; // <-- NEW
 
     const { type, sizes } = currentBlock;
     const isBranchBlock = ['block', 'hat', 'end'].includes(type);
@@ -433,6 +421,9 @@ function editBlock(uuid, updates) {
     if (updates.colors) {
         block.colors = updates.colors;
     }
+    if (updates.text !== undefined) { // <-- NEW
+        block.text = updates.text;
+    }
     if (updates.sizes) {
         block.sizes = updates.sizes;
         needsRegeneration = true;
@@ -454,15 +445,9 @@ function editBlock(uuid, updates) {
     }
 
     if (needsRegeneration) {
-        // Explicitly build the definitive snapPoints array.
-        // 1. Get the block's default snap points by calling the factory with no custom points.
         const defaultSizing = block.sizes.map(s => ({ ...s, customSnapPoints: [] }));
         const defaultPoints = blocks.Block(block.type, block.colors, defaultSizing).snapPoints;
-
-        // 2. Get the true custom points directly from the block's sizes property.
         const customPoints = block.sizes.flatMap(s => s.customSnapPoints || []);
-
-        // 3. Combine them to create the single source of truth for snap points.
         block.snapPoints = [...defaultPoints, ...customPoints];
     }
 }
@@ -483,6 +468,7 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
 
     appState.blockSpace[uuid] = {
         type, uuid, colors, sizes,
+        text: '', // <-- NEW
         snapPoints: blockData.snapPoints,
         transform: { x: 420, y: 50 },
         parent: null,
@@ -617,14 +603,20 @@ function setupEventListeners() {
         });
     }
     
-    const controls = [dom.color1input, dom.color2input, dom.typeinput];
+    // MODIFIED: Add textInput to the list of controls
+    const controls = [dom.color1input, dom.color2input, dom.typeinput, dom.textInput];
     controls.forEach(input => {
         if (!input) return;
         input.addEventListener('change', () => {
             if (!appState.targetID) return;
             const updates = {};
-            if (input === dom.typeinput) updates.type = dom.typeinput.value;
-            else if (input === dom.color1input || input === dom.color2input) updates.colors = { inner: dom.color1input.value, outer: dom.color2input.value };
+            if (input === dom.typeinput) {
+                updates.type = dom.typeinput.value;
+            } else if (input === dom.textInput) { // <-- NEW
+                updates.text = dom.textInput.value;
+            } else if (input === dom.color1input || input === dom.color2input) {
+                updates.colors = { inner: dom.color1input.value, outer: dom.color2input.value };
+            }
             
             editBlock(appState.targetID, updates);
             render();
@@ -698,12 +690,10 @@ function setupEventListeners() {
                 pointToEdit[prop] = value;
                 editBlock(appState.targetID, { sizes: newSizes });
 
-                // If a dropdown ('role') was changed, do a partial render of only the blocks.
                 if (target.matches('select')) {
                     recalculateAllLayouts();
                     renderBlocks();
                 } else {
-                // Otherwise (text/number input), the user has finished editing, so do a full render.
                     render();
                 }
             }
