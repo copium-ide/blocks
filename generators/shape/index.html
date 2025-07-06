@@ -89,6 +89,24 @@
         opacity: 0.8;
         filter: drop-shadow(0 0 10px rgba(97, 97, 97, 0.7));
     }
+    .snap-point-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px;
+        border-bottom: 1px solid #444;
+    }
+    .snap-point-item.default-point {
+        color: #aaa;
+    }
+    .snap-point-controls button {
+        margin-left: 5px;
+        font-size: 0.8em;
+    }
+    .connected {
+        color: #8f8;
+        font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -136,6 +154,15 @@
         <div id="connection-properties-panel" style="display: none;">
             <h3>Connections</h3>
             <div id="connections-list"></div>
+        </div>
+        <hr>
+
+        <div id="snap-points-panel" class="panel" style="display: none;">
+            <h3>Snap Points</h3>
+            <div id="snap-points-list">
+                <!-- Snap points will be dynamically added here -->
+            </div>
+            <button id="add-snap-point-btn">Add Custom Snap Point</button>
         </div>
         <hr>
 

@@ -16,10 +16,13 @@ function getElements() {
         blockSelectorPanel: document.getElementById('block-selector-panel'),
         blockPropertiesPanel: document.getElementById('block-properties-panel'),
         connectionPropertiesPanel: document.getElementById('connection-properties-panel'),
+        snapPointsPanel: document.getElementById('snap-points-panel'),
         creationPanel: document.getElementById('creation-panel'),
         // Controls
         slidersContainer: document.getElementById("sliders"),
         connectionsList: document.getElementById('connections-list'),
+        snapPointsList: document.getElementById('snap-points-list'),
+        addSnapPointBtn: document.getElementById('add-snap-point-btn'),
         addBranchBtn: document.getElementById('addBranch'),
         createBtn: document.getElementById('create'),
         removeBtn: document.getElementById('remove'),
@@ -57,7 +60,6 @@ function getDragGroup(blockId, allBlocks, group = []) {
     group.push(blockId);
     const block = allBlocks[blockId];
     if (block && block.children) {
-        // Updated for new children structure
         for (const connection of Object.values(block.children)) {
             getDragGroup(connection.id, allBlocks, group);
         }
@@ -80,7 +82,6 @@ function calculateChainHeight(startBlockId) {
     while (currentBlockId) {
         totalHeight += getBlockVisualHeight(currentBlockId);
         const currentBlock = appState.blockSpace[currentBlockId];
-        // Updated for new children structure
         currentBlockId = currentBlock?.children['bottom']?.id;
     }
     return totalHeight;
@@ -99,7 +100,6 @@ function recalculateAllLayouts() {
             for (let i = 0; i < newSizes.length; i++) {
                 const branch = newSizes[i];
                 if (branch.loop) {
-                    // Updated for new children structure
                     const innerChainStartId = block.children['topInner' + i]?.id;
                     const newLoopHeight = calculateChainHeight(innerChainStartId) || MIN_LOOP_HEIGHT;
                     if (branch.loop.height !== newLoopHeight) {
@@ -115,7 +115,6 @@ function recalculateAllLayouts() {
         }
 
         for (const snapPointName in block.children) {
-            // Updated for new children structure
             const childId = block.children[snapPointName].id;
             const childBlock = appState.blockSpace[childId];
             if (!childBlock) continue;
@@ -149,6 +148,9 @@ function generateShape(uuid, type, colors, sizes) {
     const shapeData = blocks.Block(type, colors, sizes);
     const blockElm = document.getElementById(uuid);
     if (blockElm) {
+        while (blockElm.firstChild) {
+            blockElm.removeChild(blockElm.firstChild);
+        }
         svg.generate(blockElm, shapeData, getAppScale());
     }
 }
@@ -201,12 +203,14 @@ function populateSelector() {
 function renderSelectedBlockControls() {
     clearNode(dom.slidersContainer);
     clearNode(dom.connectionsList);
+    clearNode(dom.snapPointsList);
 
     const currentBlock = appState.blockSpace[appState.targetID];
 
     if (!currentBlock) {
         dom.blockPropertiesPanel.style.display = 'none';
         dom.connectionPropertiesPanel.style.display = 'none';
+        dom.snapPointsPanel.style.display = 'none';
         return;
     }
 
@@ -218,7 +222,6 @@ function renderSelectedBlockControls() {
 
     const { type, sizes } = currentBlock;
     const isBranchBlock = ['block', 'hat', 'end'].includes(type);
-
     dom.addBranchBtn.style.display = isBranchBlock ? 'block' : 'none';
 
     sizes.forEach((branch, index) => {
@@ -231,7 +234,6 @@ function renderSelectedBlockControls() {
         if (isBranchBlock && sizes.length > 1) {
             const removeBtn = document.createElement('button');
             removeBtn.className = 'remove-branch';
-            removeBtn.title = 'Remove Branch';
             removeBtn.textContent = 'X';
             removeBtn.dataset.index = index;
             header.appendChild(removeBtn);
@@ -263,55 +265,124 @@ function renderSelectedBlockControls() {
     // --- Populate Connection Properties Panel ---
     const maleSnapPoints = currentBlock.snapPoints.filter(p => p.role === 'male');
     let connectionCount = 0;
-
     maleSnapPoints.forEach(point => {
         const connection = currentBlock.children[point.name];
         if (connection) {
             connectionCount++;
             const childBlock = appState.blockSpace[connection.id];
             const childName = childBlock ? `${childBlock.type} (${childBlock.uuid.substring(0, 4)})` : '...';
-
-            // =================================================================
-            // --- BUG FIX STARTS HERE ---
-            // This is the robust way to create the lock UI to prevent duplicates.
-            
             const div = document.createElement('div');
             div.className = 'connection-item';
-
-            // Part 1: The descriptive text
             const textSpan = document.createElement('span');
             textSpan.innerHTML = `<b>${point.name}</b> → ${childName}`;
-            
-            // Part 2: The interactive lock control, wrapped in a label
             const lockLabel = document.createElement('label');
-            lockLabel.style.display = 'inline-block'; // Override global styles
-            lockLabel.style.width = 'auto';
             lockLabel.style.cursor = 'pointer';
-
             const lockCheckbox = document.createElement('input');
             lockCheckbox.type = 'checkbox';
             lockCheckbox.checked = connection.locked;
             lockCheckbox.dataset.pointName = point.name;
-            
             lockLabel.appendChild(lockCheckbox);
             lockLabel.appendChild(document.createTextNode(' Locked'));
-
-            // Assemble the final element
             div.appendChild(textSpan);
             div.appendChild(document.createElement('br'));
             div.appendChild(lockLabel);
-
             dom.connectionsList.appendChild(div);
-            // --- BUG FIX ENDS HERE ---
-            // =================================================================
         }
     });
+    dom.connectionPropertiesPanel.style.display = connectionCount > 0 ? 'block' : 'none';
 
-    if (connectionCount > 0) {
-        dom.connectionPropertiesPanel.style.display = 'block';
-    } else {
-        dom.connectionPropertiesPanel.style.display = 'none';
-    }
+    // --- Populate Snap Points Panel ---
+    // --- FIX: Reworked rendering logic to build UI from the source of truth ---
+    dom.snapPointsPanel.style.display = 'block';
+    
+    // 1. Get the list of default points to display them separately.
+    const defaultSizing = currentBlock.sizes.map(s => ({ ...s, customSnapPoints: [] }));
+    const defaultPoints = blocks.Block(currentBlock.type, currentBlock.colors, defaultSizing).snapPoints;
+
+    // 2. Render the non-editable, default snap points.
+    defaultPoints.forEach(point => {
+        const isConnected = !!currentBlock.children[point.name];
+        const div = document.createElement('div');
+        div.className = 'snap-point-item default-point';
+        let connectionInfo = isConnected ? `<span class="connected"> (Connected)</span>` : '';
+        const infoSpan = document.createElement('span');
+        infoSpan.innerHTML = `<b>${point.name}</b> (${point.role}, ${point.type})${connectionInfo}`;
+        div.appendChild(infoSpan);
+        dom.snapPointsList.appendChild(div);
+    });
+
+    // 3. Render the editable, custom snap points by iterating through the source data.
+    currentBlock.sizes.forEach((branch, branchIndex) => {
+        if (!branch.customSnapPoints) return;
+
+        branch.customSnapPoints.forEach((point, customPointIndex) => {
+            const div = document.createElement('div');
+            div.className = 'snap-point-item';
+            const editorDiv = document.createElement('div');
+            editorDiv.className = 'snap-point-editor';
+
+            const createInput = (label, prop, type, value) => {
+                const wrapper = document.createElement('div');
+                const id = `snap-editor-${currentBlock.uuid}-${customPointIndex}-${prop}`;
+                const labelEl = document.createElement('label');
+                labelEl.textContent = `${label}: `;
+                labelEl.htmlFor = id;
+                const inputEl = document.createElement('input');
+                inputEl.id = id;
+                inputEl.type = type;
+                inputEl.value = value;
+                inputEl.className = 'snap-point-input';
+                inputEl.dataset.branchIndex = branchIndex;
+                inputEl.dataset.pointIndex = customPointIndex;
+                inputEl.dataset.prop = prop;
+                if (type === 'number') inputEl.step = 0.1;
+                wrapper.appendChild(labelEl);
+                wrapper.appendChild(inputEl);
+                return wrapper;
+            };
+
+            const createSelect = (label, prop, options, value) => {
+                const wrapper = document.createElement('div');
+                const id = `snap-editor-${currentBlock.uuid}-${customPointIndex}-${prop}`;
+                const labelEl = document.createElement('label');
+                labelEl.textContent = `${label}: `;
+                labelEl.htmlFor = id;
+                const selectEl = document.createElement('select');
+                selectEl.id = id;
+                selectEl.className = 'snap-point-input';
+                selectEl.dataset.branchIndex = branchIndex;
+                selectEl.dataset.pointIndex = customPointIndex;
+                selectEl.dataset.prop = prop;
+                options.forEach(opt => {
+                    const optionEl = document.createElement('option');
+                    optionEl.value = opt;
+                    optionEl.textContent = opt;
+                    if (opt === value) optionEl.selected = true;
+                    selectEl.appendChild(optionEl);
+                });
+                wrapper.appendChild(labelEl);
+                wrapper.appendChild(selectEl);
+                return wrapper;
+            };
+
+            editorDiv.appendChild(createInput('Name', 'name', 'text', point.name));
+            editorDiv.appendChild(createSelect('Role', 'role', ['male', 'female'], point.role));
+            editorDiv.appendChild(createInput('Type', 'type', 'text', point.type));
+            editorDiv.appendChild(createInput('X', 'x', 'number', point.x));
+            editorDiv.appendChild(createInput('Y', 'y', 'number', point.y));
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.textContent = 'Remove';
+            removeBtn.className = 'remove-snap-point';
+            removeBtn.dataset.branchIndex = branchIndex;
+            removeBtn.dataset.pointIndex = customPointIndex;
+            editorDiv.appendChild(removeBtn);
+
+            div.appendChild(editorDiv);
+            dom.snapPointsList.appendChild(div);
+        });
+    });
+    // --- End of Fix ---
 }
 
 
@@ -345,27 +416,35 @@ function editBlock(uuid, updates) {
     const block = appState.blockSpace[uuid];
     if (!block) return;
 
-    // When changing type, ensure the sizes array is consistent with the new type.
+    let needsRegeneration = false;
+
+    if (updates.colors) {
+        block.colors = updates.colors;
+    }
+    if (updates.sizes) {
+        block.sizes = updates.sizes;
+        needsRegeneration = true;
+    }
     if (updates.type && updates.type !== block.type) {
+        block.type = updates.type;
+        needsRegeneration = true;
+
         const newTypeIsBranch = ['block', 'hat', 'end'].includes(updates.type);
-        const newSizes = block.sizes.map(s => {
+        block.sizes = block.sizes.map(s => {
             const newSize = { ...s };
             if (newTypeIsBranch) {
-                if (!newSize.loop) {
-                    newSize.loop = { height: MIN_LOOP_HEIGHT };
-                }
+                if (!newSize.loop) newSize.loop = { height: MIN_LOOP_HEIGHT };
             } else {
                 delete newSize.loop;
             }
             return newSize;
         });
-        block.sizes = newSizes;
     }
 
-    Object.assign(block, updates);
-    if (updates.sizes || updates.type) {
+    if (needsRegeneration) {
         block.snapPoints = blocks.Block(block.type, block.colors, block.sizes).snapPoints;
     }
+
     render();
 }
 
@@ -374,22 +453,11 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
     do { uuid = crypto.randomUUID(); } while (appState.blockSpace.hasOwnProperty(uuid));
 
     const isBranch = ['block', 'hat', 'end'].includes(type);
-    let customPoints = [];
-
-    if (isBranch) {
-        // Example for a 'block' type, will create a MALE snap point
-        customPoints = [{ name: 'value_out', x: 12, type: 'number' }];
-    } else if (type === 'string') {
-        // Example for a 'string' type, will create a FEMALE snap point
-        customPoints = [{ name: 'length_in', x: 5, type: 'number' }];
-    }
-
     const sizes = [{ 
         height: 1, 
         width: 1, 
-        // Only branch blocks have loops
         loop: isBranch ? { height: MIN_LOOP_HEIGHT } : undefined,
-        customSnapPoints: customPoints
+        customSnapPoints: []
     }];
 
     const blockData = blocks.Block(type, colors, sizes);
@@ -439,7 +507,7 @@ function handleDetach(childId, restorableConnection, shouldRender = true) {
             restorableConnection.childId, 
             restorableConnection.parentId, 
             restorableConnection.snapPointName,
-            restorableConnection.locked // Restore with locked state
+            restorableConnection.locked
         );
     }
 
@@ -460,16 +528,12 @@ function handleSnap(draggedBlockId, finalTransform, snapInfo) {
             const { parentId, parentSnapPoint } = snapInfo;
             const parentBlock = appState.blockSpace[parentId];
             const originalConnection = parentBlock.children[parentSnapPoint.name];
-
             const draggedBlockBottomPoint = mainDraggedBlock.snapPoints.find(p => p.role === 'male' && p.name === 'bottom');
             if (draggedBlockBottomPoint) {
-                // Connect original child to bottom of dragged block, preserving its locked state
                 setParent(originalConnection.id, draggedBlockId, draggedBlockBottomPoint.name, originalConnection.locked);
-                // Connect dragged block to parent, unlocked by default
                 setParent(draggedBlockId, parentId, parentSnapPoint.name, false);
             }
         } else if (snapInfo.snapType === 'append') {
-            // Connect dragged block to parent, unlocked by default
             setParent(draggedBlockId, snapInfo.parentId, snapInfo.parentSnapPoint.name, false);
         }
     }
@@ -549,6 +613,74 @@ function setupEventListeners() {
             if (!appState.targetID) return;
             const block = appState.blockSpace[appState.targetID];
             const newSizes = [...block.sizes, { height: 1, width: 1, loop: { height: MIN_LOOP_HEIGHT } }];
+            editBlock(appState.targetID, { sizes: newSizes });
+        });
+    }
+
+    if (dom.addSnapPointBtn) {
+        dom.addSnapPointBtn.addEventListener('click', () => {
+            if (!appState.targetID) return;
+            const block = appState.blockSpace[appState.targetID];
+            const newSizes = JSON.parse(JSON.stringify(block.sizes));
+            if (!newSizes[0].customSnapPoints) newSizes[0].customSnapPoints = [];
+            let i = 0, newName;
+            do { i++; newName = `custom_${i}`; } while (block.snapPoints.some(p => p.name === newName));
+            newSizes[0].customSnapPoints.push({ name: newName, role: 'male', type: 'any', x: 0, y: 0 });
+            editBlock(appState.targetID, { sizes: newSizes });
+        });
+    }
+
+    if (dom.snapPointsList) {
+        // Listener for live editing of snap point properties
+        dom.snapPointsList.addEventListener('input', (event) => {
+            const target = event.target;
+            if (!target.matches('.snap-point-input') || !appState.targetID) return;
+
+            const block = appState.blockSpace[appState.targetID];
+            const branchIndex = parseInt(target.dataset.branchIndex, 10);
+            const pointIndex = parseInt(target.dataset.pointIndex, 10);
+            const prop = target.dataset.prop;
+            let value = target.value;
+            if (target.type === 'number') value = parseFloat(value);
+
+            if (prop === 'name') {
+                const allCustomPointsOnBlock = block.sizes.flatMap(s => s.customSnapPoints || []);
+                const pointBeingEdited = allCustomPointsOnBlock[pointIndex]; // This assumes a flat index, might need refinement for multi-branch
+
+                const isDuplicate = block.snapPoints.some(p => {
+                    // A name is a duplicate if it matches another point's name,
+                    // AND that point is not the one we are currently editing.
+                    return p.name.toLowerCase() === value.toLowerCase() && p.name.toLowerCase() !== pointBeingEdited.name.toLowerCase();
+                });
+
+                if (isDuplicate || value.trim() === '') {
+                    target.style.outline = '2px solid red';
+                    return; 
+                } else {
+                    target.style.outline = '';
+                }
+            }
+
+            const newSizes = JSON.parse(JSON.stringify(block.sizes));
+            const pointToEdit = newSizes[branchIndex].customSnapPoints[pointIndex];
+            
+            if (pointToEdit) {
+                pointToEdit[prop] = value;
+                editBlock(appState.targetID, { sizes: newSizes });
+            }
+        });
+
+        // Listener for removing snap points
+        dom.snapPointsList.addEventListener('click', (event) => {
+            const target = event.target;
+            if (!target.matches('.remove-snap-point') || !appState.targetID) return;
+
+            const block = appState.blockSpace[appState.targetID];
+            const branchIndex = parseInt(target.dataset.branchIndex, 10);
+            const pointIndex = parseInt(target.dataset.pointIndex, 10);
+
+            const newSizes = JSON.parse(JSON.stringify(block.sizes));
+            newSizes[branchIndex].customSnapPoints.splice(pointIndex, 1);
             editBlock(appState.targetID, { sizes: newSizes });
         });
     }
