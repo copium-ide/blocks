@@ -11,27 +11,17 @@ function getDragGroup(blockId, allBlocks) {
     return group;
 }
 
-/**
- * Traverses up the hierarchy from a given block to find the highest-level
- * block that is part of a continuous chain of locked connections.
- * @param {string} blockId The ID of the block to start from.
- * @param {object} allBlocks The map of all blocks in the workspace.
- * @returns {string} The ID of the "root" block for the drag operation.
- */
 function findDragRoot(blockId, allBlocks) {
     const block = allBlocks[blockId];
-    // If there's no parent, this block is the root.
     if (!block || !block.parent) {
         return blockId;
     }
 
     const parentBlock = allBlocks[block.parent];
     if (!parentBlock || !parentBlock.children) {
-        // Data inconsistency, treat this block as the root.
         return blockId;
     }
 
-    // Find the connection object in the parent's children to check its locked status.
     let isLocked = false;
     for (const connection of Object.values(parentBlock.children)) {
         if (connection.id === blockId) {
@@ -40,8 +30,6 @@ function findDragRoot(blockId, allBlocks) {
         }
     }
 
-    // If the connection to the parent is locked, recurse up to find the parent's root.
-    // Otherwise, this block is the root of the drag.
     if (isLocked) {
         return findDragRoot(parentBlock.uuid, allBlocks);
     } else {
@@ -52,9 +40,8 @@ function getSnapRadius() {
     return 3 * main.getAppScale();
 }
 
-export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelect) {
-    
 
+export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelect) {
     // --- Drag State ---
     let isDragging = false;
     let selectedElement = null;
@@ -91,33 +78,26 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
         const clickedElement = event.target.closest('svg[blocktype]');
         if (!clickedElement || !svgContainer.contains(clickedElement)) return;
 
-        // Always select the block that was actually clicked.
         if (onSelect) {
             onSelect(clickedElement.id);
         }
 
-        // --- NEW LOGIC: Determine the true root of the drag ---
-        // If a locked block is clicked, we drag its parent instead.
         const dragRootId = findDragRoot(clickedElement.id, allBlocks);
         const dragRootElement = document.getElementById(dragRootId);
         if (!dragRootElement) return;
-        // --- END NEW LOGIC ---
 
         isDragging = true;
-        // The `selectedElement` is the root of the drag operation.
         selectedElement = dragRootElement; 
         
         restorableConnection = null;
         currentSnapTarget = null;
 
         const blockData = allBlocks[selectedElement.id];
-        // Detach the entire group (starting from the root) if it has a parent.
         if (blockData && blockData.parent) {
             onDetach(selectedElement.id, null, true);
         }
 
         const mainBlockStartPos = blockData.transform || { x: 0, y: 0 };
-        // The drag group is calculated from the root.
         const dragGroupIds = getDragGroup(selectedElement.id, allBlocks);
         dragGroup = dragGroupIds.map(id => {
             const el = document.getElementById(id);
@@ -176,7 +156,7 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
                         childId: originalConnection.id,
                         parentId: newSnapInfo.parentId,
                         snapPointName: newSnapInfo.parentSnapPoint.name,
-                        locked: originalConnection.locked // Preserve locked state
+                        locked: originalConnection.locked
                     };
                 }
                 onSnap(selectedElement.id, newSnapInfo.position, newSnapInfo);
@@ -232,9 +212,11 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
         const effectiveSnapRadius = getSnapRadius();
         const draggedBlockData = allBlocks[draggedBlockId];
         
-        if (!draggedBlockData || !draggedBlockData.snapPoints) return null;
+        // Directly use the block's snapPoints, which are now guaranteed to be resolved.
+        const draggedSnapPoints = draggedBlockData.snapPoints || [];
+        if (!draggedSnapPoints.length) return null;
 
-        const draggedFemalePoint = draggedBlockData.snapPoints.find(p => p.role === 'female');
+        const draggedFemalePoint = draggedSnapPoints.find(p => p.role === 'female');
         if (!draggedFemalePoint) return null;
 
         let closestSnap = { distance: Infinity };
@@ -243,9 +225,11 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
             if (dragGroupIds.includes(staticBlockId)) continue;
 
             const staticBlockData = allBlocks[staticBlockId];
-            if (!staticBlockData.snapPoints || !staticBlockData.transform) continue;
+            if (!staticBlockData.transform) continue;
 
-            for (const staticMalePoint of staticBlockData.snapPoints.filter(p => p.role === 'male')) {
+            const staticSnapPoints = staticBlockData.snapPoints || [];
+            
+            for (const staticMalePoint of staticSnapPoints.filter(p => p.role === 'male')) {
                 if (draggedFemalePoint.type !== staticMalePoint.type) continue;
 
                 const targetX = staticBlockData.transform.x + (staticMalePoint.x * main.getAppScale()) - (draggedFemalePoint.x * main.getAppScale());
@@ -280,8 +264,10 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
         for (const blockId in allBlocks) {
             if (dragGroupIds.includes(blockId)) continue;
             const blockData = allBlocks[blockId];
-            if (!blockData.snapPoints || !blockData.transform) continue;
-            blockData.snapPoints.forEach((point) => {
+            if (!blockData.transform) continue;
+            
+            const resolvedPoints = blockData.snapPoints || [];
+            resolvedPoints.forEach((point) => {
                 if (point.role === 'male') {
                     const cx = blockData.transform.x + (point.x * main.getAppScale());
                     const cy = blockData.transform.y + (point.y * main.getAppScale());
@@ -297,40 +283,28 @@ export function makeDraggable(svgContainer, allBlocks, onSnap, onDetach, onSelec
         }
         
         const draggedBlockData = allBlocks[selectedElement.id];
-        if (draggedBlockData && draggedBlockData.snapPoints) {
-            draggedBlockData.snapPoints.forEach(point => {
-                if (point.role === 'female') {
-                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                    circle.setAttribute('r', circleRadius);
-                    circle.setAttribute('fill', 'rgba(255, 100, 100, 0.8)');
-                    circle.dataset.blockId = selectedElement.id;
-                    snapPointVisualizerGroup.appendChild(circle);
-                }
-            });
-        }
+        const resolvedDraggedPoints = draggedBlockData.snapPoints || [];
+        resolvedDraggedPoints.forEach(point => {
+            if (point.role === 'female') {
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('r', circleRadius);
+                circle.setAttribute('fill', 'rgba(255, 100, 100, 0.8)');
+                circle.dataset.blockId = selectedElement.id;
+                snapPointVisualizerGroup.appendChild(circle);
+            }
+        });
     }
 
-    /**
-     * This is the fixed function.
-     * It updates the position of the red visualizers attached to the block being dragged.
-     */
     function updateActiveVisualizers(newBlockPos) {
         if (!snapPointVisualizerGroup || !selectedElement) return;
 
         const activeCircles = snapPointVisualizerGroup.querySelectorAll(`[data-block-id="${selectedElement.id}"]`);
         const blockData = allBlocks[selectedElement.id];
-        if (!blockData || !blockData.snapPoints) return;
-
-        // Get the female points from the block's data. This is our source of truth.
-        const femalePoints = blockData.snapPoints.filter(p => p.role === 'female');
         
-        // FIX: Iterate over the data (femalePoints) instead of the DOM collection (activeCircles).
-        // This ensures that we are mapping the correct data point to the correct visualizer circle,
-        // assuming their creation order was consistent, which it is. This is more robust against
-        // potential DOM/data mismatches.
+        const femalePoints = (blockData.snapPoints || []).filter(p => p.role === 'female');
+        
         femalePoints.forEach((point, index) => {
             const circle = activeCircles[index];
-            // Make sure a corresponding circle exists before trying to update it.
             if (circle) {
                 circle.setAttribute('cx', newBlockPos.x + (point.x * main.getAppScale()));
                 circle.setAttribute('cy', newBlockPos.y + (point.y * main.getAppScale()));

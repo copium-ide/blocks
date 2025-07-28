@@ -1,13 +1,9 @@
-import * as blockConstants from './blockComponents.js';
-// constants, for all inputs
-export const INPUT_HEIGHT = 4;
-export const INPUT_WIDTH = 10;
-export const STROKE_WIDTH = 0.25;
+import * as constants from './constants.js';
 
 export function input(colors, size, type) {
     const sizes = size[0];
-    const dheight = sizes.height * INPUT_HEIGHT;
-    const dwidth = sizes.width * INPUT_WIDTH;
+    const dheight = sizes.height * constants.BLOCK_HEIGHT;
+    const dwidth = sizes.width * constants.BLOCK_WIDTH;
     
     // Initialize with points and the default MALE output snap point.
     const shape = {
@@ -20,9 +16,25 @@ export function input(colors, size, type) {
     // Custom FEMALE snap points for plugging other values *into* this one.
     if (sizes.customSnapPoints && Array.isArray(sizes.customSnapPoints)) {
         sizes.customSnapPoints.forEach(customPoint => {
+            let xPos = customPoint.x;
+            if (xPos === 'center') {
+                xPos = dwidth / 2;
+            }
+
+            // Default to vertical center. Allow override.
+            let yPos = dheight / 2;
+            if (customPoint.y !== undefined) {
+                if (customPoint.y === 'center') {
+                    yPos = dheight / 2;
+                } else {
+                    // Assume customPoint.y is relative to the top (y=0)
+                    yPos = customPoint.y;
+                }
+            }
+
             shape.snapPoints.push({
-                x: customPoint.x,      // User-defined X
-                y: dheight / 2,        // Vertically centered
+                x: xPos,
+                y: yPos,
                 type: customPoint.type,
                 role: 'female',        // Role is 'female' for an input slot
                 name: customPoint.name
@@ -69,26 +81,26 @@ export function input(colors, size, type) {
 }
 
 function str(x = 0, y = 0, h = 1, inverted = false) {
-    const dh = h / INPUT_HEIGHT;
+    const dh = h / constants.BLOCK_HEIGHT;
     if (inverted == true) {
         return [
-            {x: -0.5+x, y: 0, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: -0.5+x, y: 0, cornerRadius: constants.CORNER_RADIUS},
             {x: -1+x, y: h*.25, cornerRadius: 8*dh},
             {x: -1+x, y: h*.75, cornerRadius: 8*dh},
-            {x: -0.5+x, y: h, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: -0.5+x, y: h, cornerRadius: constants.CORNER_RADIUS},
         ];
     } else {
         return [
-            {x: 0.5+x, y: h, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: 0.5+x, y: h, cornerRadius: constants.CORNER_RADIUS},
             {x: 1+x, y: h*.75, cornerRadius: 8*dh},
             {x: 1+x, y: h*.25, cornerRadius: 8*dh},
-            {x: 0.5+x, y: 0, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: 0.5+x, y: 0, cornerRadius: constants.CORNER_RADIUS},
         ];
     }
 }
 
 function num(x = 0, y = 0, h = 1, inverted = false) {
-    const dh = h / INPUT_HEIGHT;
+    const dh = h / constants.BLOCK_HEIGHT;
     if (inverted == true) {
         return [
             {x: -1+x, y: 0, cornerRadius: 2},
@@ -105,15 +117,15 @@ function num(x = 0, y = 0, h = 1, inverted = false) {
 function bool(x = 0, y = 0, h = 1, inverted = false) {
     if (inverted == true) {
         return [
-            {x: 0+x, y: 0, cornerRadius: blockConstants.CORNER_RADIUS},
-            {x: -1+x, y: h*.5, cornerRadius: blockConstants.CORNER_RADIUS},
-            {x: 0+x, y: h, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: 0+x, y: 0, cornerRadius: constants.CORNER_RADIUS},
+            {x: -1+x, y: h*.5, cornerRadius: constants.CORNER_RADIUS},
+            {x: 0+x, y: h, cornerRadius: constants.CORNER_RADIUS},
         ];
     } else {
         return [
-            {x: 0+x, y: h, cornerRadius: blockConstants.CORNER_RADIUS},
-            {x: 1+x, y: h*.5, cornerRadius: blockConstants.CORNER_RADIUS},
-            {x: 0+x, y: 0, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: 0+x, y: h, cornerRadius: constants.CORNER_RADIUS},
+            {x: 1+x, y: h*.5, cornerRadius: constants.CORNER_RADIUS},
+            {x: 0+x, y: 0, cornerRadius: constants.CORNER_RADIUS},
         ];
     }
 }
@@ -121,13 +133,13 @@ function bool(x = 0, y = 0, h = 1, inverted = false) {
 function arr(x = 0, y = 0, h = 1, inverted = false) {
     if (inverted == true) {
         return [
-            {x: -1+x, y: 0, cornerRadius: blockConstants.CORNER_RADIUS},
-            {x: -1+x, y: h, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: -1+x, y: 0, cornerRadius: constants.CORNER_RADIUS},
+            {x: -1+x, y: h, cornerRadius: constants.CORNER_RADIUS},
         ];
     } else {
         return [
-            {x: 1+x, y: h, cornerRadius: blockConstants.CORNER_RADIUS},
-            {x: 1+x, y: 0, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: 1+x, y: h, cornerRadius: constants.CORNER_RADIUS},
+            {x: 1+x, y: 0, cornerRadius: constants.CORNER_RADIUS},
         ];
     }
 }
@@ -135,19 +147,19 @@ function arr(x = 0, y = 0, h = 1, inverted = false) {
 function obj(x = 0, y = 0, h = 1, inverted = false) {
     if (inverted == true) {
         return [
-            {x: 0+x, y: 0, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: 0+x, y: 0, cornerRadius: constants.CORNER_RADIUS},
             {x: -0.5+x, y: h*.5-0.5, cornerRadius: 0},
             {x: -1+x, y: h*.5, cornerRadius: 8},
             {x: -0.5+x, y: h*.5+0.5, cornerRadius: 0},
-            {x: 0+x, y: h, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: 0+x, y: h, cornerRadius: constants.CORNER_RADIUS},
         ];
     } else {
         return [
-            {x: 0+x, y: h, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: 0+x, y: h, cornerRadius: constants.CORNER_RADIUS},
             {x: 0.5+x, y: h*.5+0.5, cornerRadius: 0},
             {x: 1+x, y: h*.5, cornerRadius: 8},
             {x: 0.5+x, y: h*.5-0.5, cornerRadius: 0},
-            {x: 0+x, y: 0, cornerRadius: blockConstants.CORNER_RADIUS},
+            {x: 0+x, y: 0, cornerRadius: constants.CORNER_RADIUS},
         ];
     }
 }
@@ -156,7 +168,7 @@ function footer(colors) {
     return {
         fill: colors.inner,
         stroke: colors.outer,
-        strokeWidth: STROKE_WIDTH,
+        strokeWidth: constants.STROKE_WIDTH,
         strokeLinejoin: "round",
         closePath: true
     };

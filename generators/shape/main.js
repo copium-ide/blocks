@@ -1,7 +1,7 @@
 import * as blocks from './blocks.js';
 import * as svg from './svg.js';
 import * as drag from './drag.js';
-import * as constants from './blockComponents.js';
+import * as constants from './constants.js';
 
 // --- Configuration ---
 let appScale = 8;
@@ -30,7 +30,7 @@ function getElements() {
         uuidinput: document.getElementById("blockType"),
         color1input: document.getElementById("color1"),
         color2input: document.getElementById("color2"),
-        textInput: document.getElementById('text-input'), // <-- NEW
+        textInput: document.getElementById('text-input'),
         appScaleSlider: document.getElementById('appScaleSlider'),
         appScaleValue: document.getElementById('appScaleValue'),
     };
@@ -70,69 +70,180 @@ function getDragGroup(blockId, allBlocks, group = []) {
 
 // --- Layout Calculation Logic (Reads from state) ---
 
-function getBlockVisualHeight(blockId) {
+function getBlockVisualDimensions(blockId) {
     const block = appState.blockSpace[blockId];
-    if (!block) return 0;
-    return block.sizes.reduce((sum, branch) => sum + branch.height, 0);
-}
-
-function calculateChainHeight(startBlockId) {
-    if (!startBlockId) return 0;
-    let totalHeight = 0;
-    let currentBlockId = startBlockId;
-    while (currentBlockId) {
-        totalHeight += getBlockVisualHeight(currentBlockId);
-        const currentBlock = appState.blockSpace[currentBlockId];
-        currentBlockId = currentBlock?.children['bottom']?.id;
+    if (!block || !block.sizes.length) return { width: 0, height: 0 };
+    
+    if (block.type !== 'block' && block.type !== 'hat' && block.type !== 'end') {
+         return {
+            width: block.sizes[0].width * constants.BLOCK_WIDTH / getAppScale(),
+            height: block.sizes[0].height * constants.BLOCK_HEIGHT / getAppScale()
+        };
     }
-    return totalHeight;
+
+    let totalHeight = 0;
+    let maxWidth = 0;
+    block.sizes.forEach(branch => {
+        totalHeight += branch.height * constants.BLOCK_HEIGHT;
+        if(branch.loop) {
+            totalHeight += branch.loop.height * constants.BLOCK_HEIGHT;
+        }
+        maxWidth = Math.max(maxWidth, branch.width * constants.BLOCK_WIDTH);
+    });
+    
+    return {
+        width: maxWidth / getAppScale(),
+        height: totalHeight / getAppScale()
+    };
 }
 
 function recalculateAllLayouts() {
-    const topLevelBlocks = Object.values(appState.blockSpace).filter(b => !b.parent);
+    const PADDING = 0.4;
 
-    function updateChain(blockId) {
+    function getChainExtents(startBlockId) {
+        if (!startBlockId) return { width: 0, height: 0 };
+        
+        let totalHeight = 0;
+        let maxWidth = 0;
+        let currentBlockId = startBlockId;
+
+        while (currentBlockId) {
+            const currentBlock = appState.blockSpace[currentBlockId];
+            if (!currentBlock) break;
+
+            const dims = getBlockVisualDimensions(currentBlockId);
+            totalHeight += (dims.height * getAppScale());
+            maxWidth = Math.max(maxWidth, dims.width * getAppScale());
+            
+            currentBlockId = currentBlock.children['bottom']?.id;
+        }
+        return { width: maxWidth, height: totalHeight };
+    }
+
+    // --- Pass 1: Update sizes (Bottom-up using post-order traversal) ---
+    const sized = new Set();
+    function processBlockSize(blockId) {
+        if (!blockId || sized.has(blockId)) return;
         const block = appState.blockSpace[blockId];
         if (!block) return;
 
+        for (const childConnection of Object.values(block.children)) {
+            processBlockSize(childConnection.id);
+        }
+
         if (block.sizes?.some(s => s.loop)) {
-            const newSizes = block.sizes.map(s => ({ ...s }));
-            let needsSnapPointUpdate = false;
+            const newSizes = JSON.parse(JSON.stringify(block.sizes));
+            let loopHeightChanged = false;
             for (let i = 0; i < newSizes.length; i++) {
                 const branch = newSizes[i];
                 if (branch.loop) {
                     const innerChainStartId = block.children['topInner' + i]?.id;
-                    const newLoopHeight = calculateChainHeight(innerChainStartId) || MIN_LOOP_HEIGHT;
+                    const chainHeight = getChainExtents(innerChainStartId).height;
+                    const newLoopHeight = (chainHeight / constants.BLOCK_HEIGHT) || MIN_LOOP_HEIGHT;
                     if (branch.loop.height !== newLoopHeight) {
                         branch.loop.height = newLoopHeight;
-                        needsSnapPointUpdate = true;
+                        loopHeightChanged = true;
                     }
                 }
             }
-            if (needsSnapPointUpdate) {
-                block.sizes = newSizes;
-                editBlock(block.uuid, { sizes: block.sizes });
+            if (loopHeightChanged) {
+                editBlock(blockId, { sizes: newSizes });
+            }
+        }
+        
+        const mainBranch = block.sizes[0];
+        if (mainBranch && (mainBranch.auto.width || mainBranch.auto.height)) {
+            let maxChildChainWidth = 0;
+            let maxChildChainHeight = 0;
+            let hasWrappableChildren = false;
+
+            for (const childConnection of Object.values(block.children)) {
+                const childBlock = appState.blockSpace[childConnection.id];
+                // Check for "wrappable" children, ignoring standard block types.
+                if (childBlock && childBlock.type !== 'block' && childBlock.type !== 'hat' && childBlock.type !== 'end') {
+                    hasWrappableChildren = true;
+                    const { width, height } = getChainExtents(childConnection.id);
+                    maxChildChainWidth = Math.max(maxChildChainWidth, width);
+                    maxChildChainHeight = Math.max(maxChildChainHeight, height);
+                }
+            }
+
+            const newSizes = JSON.parse(JSON.stringify(block.sizes));
+            let sizeChanged = false;
+            const DEFAULT_AUTO_SIZE = 1;
+
+            if (hasWrappableChildren) {
+                // Expand to fit children
+                if (mainBranch.auto.width) {
+                    const newWidth = (maxChildChainWidth / constants.BLOCK_WIDTH) + PADDING;
+                    if (newSizes[0].width !== newWidth) {
+                        newSizes[0].width = newWidth;
+                        sizeChanged = true;
+                    }
+                }
+                if (mainBranch.auto.height) {
+                    const newHeight = (maxChildChainHeight / constants.BLOCK_HEIGHT) + PADDING;
+                    if (newSizes[0].height !== newHeight) {
+                        newSizes[0].height = newHeight;
+                        sizeChanged = true;
+                    }
+                }
+            } else {
+                // No wrappable children, reset to default size if auto is on
+                if (mainBranch.auto.width && newSizes[0].width !== DEFAULT_AUTO_SIZE) {
+                    newSizes[0].width = DEFAULT_AUTO_SIZE;
+                    sizeChanged = true;
+                }
+                if (mainBranch.auto.height && newSizes[0].height !== DEFAULT_AUTO_SIZE) {
+                    newSizes[0].height = DEFAULT_AUTO_SIZE;
+                    sizeChanged = true;
+                }
+            }
+
+            if (sizeChanged) {
+                editBlock(blockId, { sizes: newSizes });
             }
         }
 
-        for (const snapPointName in block.children) {
-            const childId = block.children[snapPointName].id;
-            const childBlock = appState.blockSpace[childId];
-            if (!childBlock) continue;
+        sized.add(blockId);
+    }
 
-            const parentMalePoint = block.snapPoints.find(p => p.name === snapPointName);
-            const childFemalePoint = childBlock.snapPoints.find(p => p.role === 'female');
-            if (!parentMalePoint || !childFemalePoint) continue;
+    // --- Pass 2: Update positions (Top-down using pre-order traversal) ---
+    const positioned = new Set();
+    function processBlockPosition(blockId) {
+        if (!blockId || positioned.has(blockId)) return;
+        const block = appState.blockSpace[blockId];
+        if (!block) return;
 
-            const scale = getAppScale();
-            childBlock.transform.x = block.transform.x + (parentMalePoint.x * scale) - (childFemalePoint.x * scale);
-            childBlock.transform.y = block.transform.y + (parentMalePoint.y * scale) - (childFemalePoint.y * scale);
+        const parentId = block.parent;
+        if (parentId) {
+            const parentBlock = appState.blockSpace[parentId];
+            const parentSnapPointName = Object.keys(parentBlock.children).find(
+                key => parentBlock.children[key].id === blockId
+            );
 
-            updateChain(childId);
+            if (parentSnapPointName) {
+                const parentMalePoint = parentBlock.snapPoints.find(p => p.name === parentSnapPointName);
+                const childFemalePoint = block.snapPoints.find(p => p.role === 'female');
+                
+                if (parentMalePoint && childFemalePoint) {
+                    const scale = getAppScale();
+                    block.transform.x = parentBlock.transform.x + (parentMalePoint.x * scale) - (childFemalePoint.x * scale);
+                    block.transform.y = parentBlock.transform.y + (parentMalePoint.y * scale) - (childFemalePoint.y * scale);
+                }
+            }
+        }
+        positioned.add(blockId);
+
+        for (const childConnection of Object.values(block.children)) {
+            processBlockPosition(childConnection.id);
         }
     }
 
-    topLevelBlocks.forEach(block => updateChain(block.uuid));
+    // --- Execution ---
+    const topLevelBlocks = Object.values(appState.blockSpace).filter(b => !b.parent);
+    topLevelBlocks.forEach(block => processBlockSize(block.uuid));
+    topLevelBlocks.forEach(block => processBlockPosition(block.uuid));
 }
 
 
@@ -145,14 +256,11 @@ function render() {
     renderSelectedBlockControls();
 }
 
-// MODIFIED: Accepts text to pass to the svg generator
 function generateShape(uuid, type, colors, sizes, snapPoints, text) {
     const shapeData = blocks.Block(type, colors, sizes);
-    shapeData.snapPoints = snapPoints;
-
+    // Use the newly generated snap points as the source of truth for rendering
     const blockElm = document.getElementById(uuid);
     if (blockElm) {
-        // Pass the text to the real SVG generator
         svg.generate(blockElm, shapeData, text, getAppScale());
     }
 }
@@ -181,7 +289,6 @@ function renderBlocks() {
         blockElm.setAttribute('x', blockData.transform.x);
         blockElm.setAttribute('y', blockData.transform.y);
         
-        // MODIFIED: Pass the block's text property
         generateShape(id, blockData.type, blockData.colors, blockData.sizes, blockData.snapPoints, blockData.text);
     }
 }
@@ -218,12 +325,11 @@ function renderSelectedBlockControls() {
         return;
     }
 
-    // --- Populate Block Properties Panel ---
     dom.blockPropertiesPanel.style.display = 'block';
     dom.typeinput.value = currentBlock.type;
     dom.color1input.value = currentBlock.colors.inner;
     dom.color2input.value = currentBlock.colors.outer;
-    dom.textInput.value = currentBlock.text; // <-- NEW
+    dom.textInput.value = currentBlock.text;
 
     const { type, sizes } = currentBlock;
     const isBranchBlock = ['block', 'hat', 'end'].includes(type);
@@ -244,7 +350,10 @@ function renderSelectedBlockControls() {
             header.appendChild(removeBtn);
         }
 
-        const createSlider = (labelText, prop, min, max, step, value) => {
+        const createAutoSlider = (labelText, prop, min, max, step, value, autoState) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'auto-slider-wrapper';
+
             const label = document.createElement('label');
             label.textContent = `${labelText}: `;
             const input = document.createElement('input');
@@ -252,12 +361,27 @@ function renderSelectedBlockControls() {
             input.min = min; input.max = max; input.step = step; input.value = value;
             input.dataset.index = index; input.dataset.prop = prop;
             input.className = 'branch-input';
+            input.disabled = autoState;
             label.appendChild(input);
-            return label;
+
+            const autoLabel = document.createElement('label');
+            const autoCheckbox = document.createElement('input');
+            autoCheckbox.type = 'checkbox';
+            autoCheckbox.checked = autoState;
+            autoCheckbox.className = 'auto-size-checkbox';
+            autoCheckbox.dataset.index = index;
+            autoCheckbox.dataset.prop = prop;
+            autoLabel.appendChild(autoCheckbox);
+            autoLabel.appendChild(document.createTextNode(' Auto'));
+            
+            wrapper.appendChild(label);
+            wrapper.appendChild(autoLabel);
+            return wrapper;
         };
 
-        branchDiv.appendChild(createSlider('Height', 'height', 0.5, 10, 0.1, branch.height));
-        branchDiv.appendChild(createSlider('Width', 'width', 0.5, 10, 0.1, branch.width));
+        branchDiv.appendChild(createAutoSlider('Height', 'height', 0.5, 10, 0.1, branch.height, branch.auto.height));
+        branchDiv.appendChild(createAutoSlider('Width', 'width', 0.5, 10, 0.1, branch.width, branch.auto.width));
+
 
         if (branch.loop) {
             const loopLabel = document.createElement('label');
@@ -267,7 +391,6 @@ function renderSelectedBlockControls() {
         dom.slidersContainer.appendChild(branchDiv);
     });
 
-    // --- Populate Connection Properties Panel ---
     const maleSnapPoints = currentBlock.snapPoints.filter(p => p.role === 'male');
     let connectionCount = 0;
     maleSnapPoints.forEach(point => {
@@ -296,13 +419,13 @@ function renderSelectedBlockControls() {
     });
     dom.connectionPropertiesPanel.style.display = connectionCount > 0 ? 'block' : 'none';
 
-    // --- Populate Snap Points Panel ---
     dom.snapPointsPanel.style.display = 'block';
     
-    const defaultSizing = currentBlock.sizes.map(s => ({ ...s, customSnapPoints: [] }));
-    const defaultPoints = blocks.Block(currentBlock.type, currentBlock.colors, defaultSizing).snapPoints;
+    currentBlock.snapPoints.forEach(point => {
+        // We only want to list default points that are not custom
+        const isCustom = currentBlock.sizes.some(s => s.customSnapPoints?.some(cp => cp.name === point.name));
+        if (isCustom) return;
 
-    defaultPoints.forEach(point => {
         const isConnected = !!currentBlock.children[point.name];
         const div = document.createElement('div');
         div.className = 'snap-point-item default-point';
@@ -322,7 +445,7 @@ function renderSelectedBlockControls() {
             const editorDiv = document.createElement('div');
             editorDiv.className = 'snap-point-editor';
 
-            const createInput = (label, prop, type, value) => {
+            const createTextInput = (label, prop, value) => {
                 const wrapper = document.createElement('div');
                 const id = `snap-editor-${currentBlock.uuid}-${customPointIndex}-${prop}`;
                 const labelEl = document.createElement('label');
@@ -330,13 +453,12 @@ function renderSelectedBlockControls() {
                 labelEl.htmlFor = id;
                 const inputEl = document.createElement('input');
                 inputEl.id = id;
-                inputEl.type = type;
+                inputEl.type = 'text';
                 inputEl.value = value;
                 inputEl.className = 'snap-point-input';
                 inputEl.dataset.branchIndex = branchIndex;
                 inputEl.dataset.pointIndex = customPointIndex;
                 inputEl.dataset.prop = prop;
-                if (type === 'number') inputEl.step = 0.1;
                 wrapper.appendChild(labelEl);
                 wrapper.appendChild(inputEl);
                 return wrapper;
@@ -366,11 +488,11 @@ function renderSelectedBlockControls() {
                 return wrapper;
             };
 
-            editorDiv.appendChild(createInput('Name', 'name', 'text', point.name));
+            editorDiv.appendChild(createTextInput('X', 'x', point.x));
+            editorDiv.appendChild(createTextInput('Y', 'y', point.y));
             editorDiv.appendChild(createSelect('Role', 'role', ['male', 'female'], point.role));
-            editorDiv.appendChild(createInput('Type', 'type', 'text', point.type));
-            editorDiv.appendChild(createInput('X', 'x', 'number', point.x));
-            editorDiv.appendChild(createInput('Y', 'y', 'number', point.y));
+            editorDiv.appendChild(createTextInput('Name', 'name', point.name));
+            editorDiv.appendChild(createTextInput('Type', 'type', point.type));
             
             const removeBtn = document.createElement('button');
             removeBtn.textContent = 'Remove';
@@ -421,7 +543,7 @@ function editBlock(uuid, updates) {
     if (updates.colors) {
         block.colors = updates.colors;
     }
-    if (updates.text !== undefined) { // <-- NEW
+    if (updates.text !== undefined) {
         block.text = updates.text;
     }
     if (updates.sizes) {
@@ -445,10 +567,11 @@ function editBlock(uuid, updates) {
     }
 
     if (needsRegeneration) {
-        const defaultSizing = block.sizes.map(s => ({ ...s, customSnapPoints: [] }));
-        const defaultPoints = blocks.Block(block.type, block.colors, defaultSizing).snapPoints;
-        const customPoints = block.sizes.flatMap(s => s.customSnapPoints || []);
-        block.snapPoints = [...defaultPoints, ...customPoints];
+        // CRITICAL FIX: The block component generators are the single source of truth.
+        // By passing the full `sizes` object (with custom points), the generator returns a
+        // complete `snapPoints` array with all coordinates resolved to numbers.
+        const shapeData = blocks.Block(block.type, block.colors, block.sizes);
+        block.snapPoints = shapeData.snapPoints;
     }
 }
 
@@ -459,7 +582,8 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
     const isBranch = ['block', 'hat', 'end'].includes(type);
     const sizes = [{ 
         height: 1, 
-        width: 1, 
+        width: 1,
+        auto: { width: true, height: true },
         loop: isBranch ? { height: MIN_LOOP_HEIGHT } : undefined,
         customSnapPoints: []
     }];
@@ -468,7 +592,7 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
 
     appState.blockSpace[uuid] = {
         type, uuid, colors, sizes,
-        text: '', // <-- NEW
+        text: '',
         snapPoints: blockData.snapPoints,
         transform: { x: 420, y: 50 },
         parent: null,
@@ -569,24 +693,26 @@ function setupEventListeners() {
             newSizes[idx][prop] = value;
             
             editBlock(appState.targetID, { sizes: newSizes });
-            recalculateAllLayouts();
-            renderBlocks();
-        });
-        
-        dom.slidersContainer.addEventListener('change', (event) => {
-            if (event.target.matches('.branch-input')) {
-                render();
-            }
+            render();
         });
 
         dom.slidersContainer.addEventListener('click', (event) => {
-            if (!event.target.matches('.remove-branch') || !appState.targetID) return;
-            const idx = parseInt(event.target.dataset.index);
-            const block = appState.blockSpace[appState.targetID];
-            if (block.sizes.length > 1) {
-                const newSizes = block.sizes.filter((_, index) => index !== idx);
+            if (event.target.matches('.auto-size-checkbox')) {
+                const block = appState.blockSpace[appState.targetID];
+                const idx = parseInt(event.target.dataset.index);
+                const prop = event.target.dataset.prop;
+                const newSizes = JSON.parse(JSON.stringify(block.sizes));
+                newSizes[idx].auto[prop] = event.target.checked;
                 editBlock(appState.targetID, { sizes: newSizes });
-                render(); 
+                render();
+            } else if (event.target.matches('.remove-branch')) {
+                 const idx = parseInt(event.target.dataset.index);
+                const block = appState.blockSpace[appState.targetID];
+                if (block.sizes.length > 1) {
+                    const newSizes = block.sizes.filter((_, index) => index !== idx);
+                    editBlock(appState.targetID, { sizes: newSizes });
+                    render(); 
+                }
             }
         });
     }
@@ -603,7 +729,6 @@ function setupEventListeners() {
         });
     }
     
-    // MODIFIED: Add textInput to the list of controls
     const controls = [dom.color1input, dom.color2input, dom.typeinput, dom.textInput];
     controls.forEach(input => {
         if (!input) return;
@@ -612,7 +737,7 @@ function setupEventListeners() {
             const updates = {};
             if (input === dom.typeinput) {
                 updates.type = dom.typeinput.value;
-            } else if (input === dom.textInput) { // <-- NEW
+            } else if (input === dom.textInput) {
                 updates.text = dom.textInput.value;
             } else if (input === dom.color1input || input === dom.color2input) {
                 updates.colors = { inner: dom.color1input.value, outer: dom.color2input.value };
@@ -634,7 +759,7 @@ function setupEventListeners() {
         dom.addBranchBtn.addEventListener('click', () => {
             if (!appState.targetID) return;
             const block = appState.blockSpace[appState.targetID];
-            const newSizes = [...block.sizes, { height: 1, width: 1, loop: { height: MIN_LOOP_HEIGHT } }];
+            const newSizes = [...block.sizes, { height: 1, width: 1, auto: { width: false, height: false }, loop: { height: MIN_LOOP_HEIGHT } }];
             editBlock(appState.targetID, { sizes: newSizes });
             render();
         });
@@ -663,54 +788,40 @@ function setupEventListeners() {
             const branchIndex = parseInt(target.dataset.branchIndex, 10);
             const pointIndex = parseInt(target.dataset.pointIndex, 10);
             const prop = target.dataset.prop;
-            let value = target.value;
-            if (target.type === 'number') value = parseFloat(value);
+            let value = target.value.trim();
 
-            if (prop === 'name') {
-                const pointBeingEdited = block.sizes[branchIndex]?.customSnapPoints[pointIndex];
-                if (!pointBeingEdited) return;
-
-                const isDuplicate = block.snapPoints.some(p => 
-                    p.name.toLowerCase() === value.toLowerCase() && p.name.toLowerCase() !== pointBeingEdited.name.toLowerCase()
-                );
-
-                if (isDuplicate || value.trim() === '') {
-                    target.style.outline = '2px solid red';
-                    target.value = pointBeingEdited.name; 
-                    return; 
+            if (prop === 'x' || prop === 'y') {
+                if (value.toLowerCase() !== 'center') {
+                    const numValue = parseFloat(value);
+                    value = isNaN(numValue) ? 0 : numValue;
                 } else {
-                    target.style.outline = '';
+                    value = 'center';
                 }
             }
-
+            
             const newSizes = JSON.parse(JSON.stringify(block.sizes));
             const pointToEdit = newSizes[branchIndex]?.customSnapPoints[pointIndex];
             
             if (pointToEdit) {
                 pointToEdit[prop] = value;
                 editBlock(appState.targetID, { sizes: newSizes });
-
-                if (target.matches('select')) {
-                    recalculateAllLayouts();
-                    renderBlocks();
-                } else {
-                    render();
-                }
+                render();
             }
         });
 
         dom.snapPointsList.addEventListener('click', (event) => {
             const target = event.target;
-            if (!target.matches('.remove-snap-point') || !appState.targetID) return;
-
-            const block = appState.blockSpace[appState.targetID];
-            const branchIndex = parseInt(target.dataset.branchIndex, 10);
-            const pointIndex = parseInt(target.dataset.pointIndex, 10);
-
-            const newSizes = JSON.parse(JSON.stringify(block.sizes));
-            newSizes[branchIndex].customSnapPoints.splice(pointIndex, 1);
-            editBlock(appState.targetID, { sizes: newSizes });
-            render();
+            if (!appState.targetID) return;
+            
+            if (target.matches('.remove-snap-point')) {
+                const block = appState.blockSpace[appState.targetID];
+                const branchIndex = parseInt(target.dataset.branchIndex, 10);
+                const pointIndex = parseInt(target.dataset.pointIndex, 10);
+                const newSizes = JSON.parse(JSON.stringify(block.sizes));
+                newSizes[branchIndex].customSnapPoints.splice(pointIndex, 1);
+                editBlock(appState.targetID, { sizes: newSizes });
+                render();
+            }
         });
     }
 
@@ -719,7 +830,6 @@ function setupEventListeners() {
 }
 
 // --- Main Application Entry Point ---
-
 function main() {
     if (!dom.workSpace) {
         console.error("The <svg id='workspace'> element was not found. Application cannot start.");

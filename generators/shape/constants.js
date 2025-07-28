@@ -1,0 +1,8 @@
+// constants, for all blocks
+export const BLOCK_HEIGHT = 4;
+export const BLOCK_WIDTH = 10;
+export const CORNER_RADIUS = 0.5;
+export const NOTCH_RADIUS = 0.25;
+export const LOOP_OFFSET = 2;
+export const STROKE_WIDTH = 0.25;
+export const NOTCH_CONNECT_X = 4;
