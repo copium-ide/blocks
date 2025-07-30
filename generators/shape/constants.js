@@ -6,3 +6,4 @@ export const NOTCH_RADIUS = 0.25;
 export const LOOP_OFFSET = 2;
 export const STROKE_WIDTH = 0.25;
 export const NOTCH_CONNECT_X = 4;
+export const FONT_SIZE = 1.5

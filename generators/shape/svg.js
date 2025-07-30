@@ -1,8 +1,6 @@
-export function generate(svgElement, shapeData, text, scale = 1) {
-    // --- The static variable to control font size ---
-    // MODIFIED: Font size set to 1.5px as requested.
-    const FONT_SIZE = '1.5px'; 
+import * as constants from './constants.js';
 
+export function generate(svgElement, shapeData, text, scale = 1) {
     // --- Static variable for left padding of the text ---
     const TEXT_PADDING_X = 0; // Adjust this value for more/less left padding
 
@@ -87,19 +85,17 @@ export function generate(svgElement, shapeData, text, scale = 1) {
         const textElement = document.createElementNS("http://www.w3.org/2000/svg", 'text');
         textElement.textContent = text;
         
-        // MODIFIED: Set 'x' to the static padding value for left alignment.
         textElement.setAttribute('x', TEXT_PADDING_X);
         textElement.setAttribute('y', viewBoxHeight / 2);
         
-        // MODIFIED: Change text-anchor to 'start' for left alignment.
         textElement.setAttribute('text-anchor', 'start'); 
         textElement.setAttribute('dominant-baseline', 'middle');
         
         textElement.setAttribute('fill', 'white');
         textElement.setAttribute('font-family', 'sans-serif');
         
-        // Use the static variable defined at the top of the function
-        textElement.setAttribute('font-size', FONT_SIZE);
+        // --- FIX: Reference the shared constant ---
+        textElement.setAttribute('font-size', constants.FONT_SIZE);
         
         textElement.setAttribute('font-weight', 'bold');
         textElement.style.pointerEvents = 'none';
