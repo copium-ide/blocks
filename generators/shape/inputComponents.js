@@ -5,15 +5,12 @@ export function input(colors, size, type) {
     const dheight = sizes.height * constants.BLOCK_HEIGHT;
     const dwidth = sizes.width * constants.BLOCK_WIDTH;
     
-    // Initialize with points and the default MALE output snap point.
     const shape = {
         points: [],
-        // --- FIX: Changed x from 0 to -1 to place it on the far-left edge ---
         snapPoints: [{ x: 0, y: dheight / 2, type: type, role: 'female', name: 'output' }],
         ...footer(colors)
     };
 
-    // Custom FEMALE snap points for plugging other values *into* this one.
     if (sizes.customSnapPoints && Array.isArray(sizes.customSnapPoints)) {
         sizes.customSnapPoints.forEach(customPoint => {
             let xPos = customPoint.x;
@@ -21,13 +18,11 @@ export function input(colors, size, type) {
                 xPos = dwidth / 2;
             }
 
-            // Default to vertical center. Allow override.
             let yPos = dheight / 2;
             if (customPoint.y !== undefined) {
                 if (customPoint.y === 'center') {
                     yPos = dheight / 2;
                 } else {
-                    // Assume customPoint.y is relative to the top (y=0)
                     yPos = customPoint.y;
                 }
             }
@@ -36,7 +31,8 @@ export function input(colors, size, type) {
                 x: xPos,
                 y: yPos,
                 type: customPoint.type,
-                role: 'female',        // Role is 'female' for an input slot
+                // FIX: Use the role provided in the custom point's data.
+                role: customPoint.role,
                 name: customPoint.name
             });
         });
@@ -75,7 +71,7 @@ export function input(colors, size, type) {
             break;
         default:
             console.warn("Input type not recognized:", type);
-            return { points: [], snapPoints: [] }; // Return a valid empty shape
+            return { points: [], snapPoints: [] };
     }
     return shape;
 }
