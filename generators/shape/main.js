@@ -44,6 +44,15 @@ const appState = {
 };
 
 // --- Utility Functions ---
+function getTextWidth(text, fontSize, font = 'sans-serif') {
+    // Re-usable canvas element for better performance
+    const canvas = getTextWidth.canvas || (getTextWidth.canvas = document.createElement("canvas"));
+    const context = canvas.getContext("2d");
+    context.font = `${fontSize}px ${font}`;
+    const metrics = context.measureText(text);
+    return metrics.width;
+}
+
 function clearNode(node) {
     if (!node) return;
     while (node.firstChild) {
@@ -159,7 +168,6 @@ function recalculateAllLayouts() {
 
             for (const childConnection of Object.values(block.children)) {
                 const childBlock = appState.blockSpace[childConnection.id];
-                // Check for "wrappable" children, ignoring standard block types.
                 if (childBlock && childBlock.type !== 'block' && childBlock.type !== 'hat' && childBlock.type !== 'end') {
                     hasWrappableChildren = true;
                     const { width, height } = getChainExtents(childConnection.id);
@@ -173,7 +181,6 @@ function recalculateAllLayouts() {
             const DEFAULT_AUTO_SIZE = 1;
 
             if (hasWrappableChildren) {
-                // Expand to fit children
                 if (mainBranch.auto.width) {
                     const newWidth = (maxChildChainWidth / constants.BLOCK_WIDTH) + PADDING;
                     if (newSizes[0].width !== newWidth) {
@@ -189,7 +196,6 @@ function recalculateAllLayouts() {
                     }
                 }
             } else {
-                // No wrappable children, reset to default size if auto is on
                 if (mainBranch.auto.width && newSizes[0].width !== DEFAULT_AUTO_SIZE) {
                     newSizes[0].width = DEFAULT_AUTO_SIZE;
                     sizeChanged = true;
@@ -258,7 +264,6 @@ function render() {
 
 function generateShape(uuid, type, colors, sizes, snapPoints, text) {
     const shapeData = blocks.Block(type, colors, sizes);
-    // Use the newly generated snap points as the source of truth for rendering
     const blockElm = document.getElementById(uuid);
     if (blockElm) {
         svg.generate(blockElm, shapeData, text, getAppScale());
@@ -329,7 +334,13 @@ function renderSelectedBlockControls() {
     dom.typeinput.value = currentBlock.type;
     dom.color1input.value = currentBlock.colors.inner;
     dom.color2input.value = currentBlock.colors.outer;
-    dom.textInput.value = currentBlock.text;
+    dom.textInput.value = currentBlock.text || '';
+
+    const textInputLabel = document.querySelector(`label[for="text-input"]`);
+    dom.textInput.style.display = '';
+    if (textInputLabel) {
+        textInputLabel.style.display = '';
+    }
 
     const { type, sizes } = currentBlock;
     const isBranchBlock = ['block', 'hat', 'end'].includes(type);
@@ -424,7 +435,6 @@ function renderSelectedBlockControls() {
     dom.snapPointsPanel.style.display = 'block';
     
     currentBlock.snapPoints.forEach(point => {
-        // We only want to list default points that are not custom
         const isCustom = currentBlock.sizes.some(s => s.customSnapPoints?.some(cp => cp.name === point.name));
         if (isCustom) return;
 
@@ -556,6 +566,11 @@ function editBlock(uuid, updates) {
         block.type = updates.type;
         needsRegeneration = true;
 
+        // --- MODIFIED ---
+        // All special text handling for type changes has been removed.
+        // The text property now persists across all type changes.
+        // --- END MODIFICATION ---
+
         const newTypeIsBranch = ['block', 'hat', 'end'].includes(updates.type);
         block.sizes = block.sizes.map(s => {
             const newSize = { ...s };
@@ -569,9 +584,6 @@ function editBlock(uuid, updates) {
     }
 
     if (needsRegeneration) {
-        // CRITICAL FIX: The block component generators are the single source of truth.
-        // By passing the full `sizes` object (with custom points), the generator returns a
-        // complete `snapPoints` array with all coordinates resolved to numbers.
         const shapeData = blocks.Block(block.type, block.colors, block.sizes);
         block.snapPoints = shapeData.snapPoints;
     }
@@ -582,6 +594,9 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
     do { uuid = crypto.randomUUID(); } while (appState.blockSpace.hasOwnProperty(uuid));
 
     const isBranch = ['block', 'hat', 'end'].includes(type);
+
+    // --- MODIFIED ---
+    // Simplified size creation. `auto` is now consistent for all new blocks.
     const sizes = [{ 
         height: 1, 
         width: 1,
@@ -589,12 +604,13 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
         loop: isBranch ? { height: MIN_LOOP_HEIGHT } : undefined,
         customSnapPoints: []
     }];
+    // --- END MODIFICATION ---
 
     const blockData = blocks.Block(type, colors, sizes);
 
     appState.blockSpace[uuid] = {
         type, uuid, colors, sizes,
-        text: '',
+        text: '', // All blocks start with empty text.
         snapPoints: blockData.snapPoints,
         transform: { x: 420, y: 50 },
         parent: null,

@@ -11,6 +11,8 @@ export function Block(type, colors, sizes) {
         case 'end':
             return blocks.branch(colors, sizes, 'notch', 'flat');
         //---------------------------------------------------------INPUTS
+        case 'label':
+            return inputs.input(colors, sizes, 'label');
         case 'number':
             return inputs.input(colors, sizes, 'number');
         case 'string':
