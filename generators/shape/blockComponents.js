@@ -142,20 +142,34 @@ function loop(offset = 0, h = 0) {
     ];
 }
 function notch(x = 0, y = 0, inverted = false) {
-    if (inverted == true) {
-        return [
-            {x: 2+x, y: 0+y, cornerRadius: constants.NOTCH_RADIUS},
-            {x: 3+x, y: 1+y, cornerRadius: constants.NOTCH_RADIUS},
-            {x: 5+x, y: 1+y, cornerRadius: constants.NOTCH_RADIUS},
-            {x: 6+x, y: 0+y, cornerRadius: constants.NOTCH_RADIUS}
-        ];
+    const flatWidth = constants.NOTCH_WIDTH * constants.NOTCH_RATIO;
+
+    const slopedWidth = (constants.NOTCH_WIDTH - flatWidth) / 2;
+
+    const p1 = {
+        x: constants.NOTCH_START_X + x,
+        y: y,
+        cornerRadius: constants.NOTCH_RADIUS
+    };
+    const p2 = {
+        x: constants.NOTCH_START_X + slopedWidth + x,
+        y: constants.NOTCH_DEPTH + y,
+        cornerRadius: constants.NOTCH_RADIUS
+    };
+    const p3 = {
+        x: constants.NOTCH_START_X + slopedWidth + flatWidth + x,
+        y: constants.NOTCH_DEPTH + y,
+        cornerRadius: constants.NOTCH_RADIUS
+    };
+    const p4 = {
+        x: constants.NOTCH_START_X + constants.NOTCH_WIDTH + x,
+        y: y,
+        cornerRadius: constants.NOTCH_RADIUS
+    };
+    if (inverted) {
+        return [p1, p2, p3, p4];
     } else {
-        return [
-            {x: 6+x, y: 0+y, cornerRadius: constants.NOTCH_RADIUS},
-            {x: 5+x, y: 1+y, cornerRadius: constants.NOTCH_RADIUS},
-            {x: 3+x, y: 1+y, cornerRadius: constants.NOTCH_RADIUS},
-            {x: 2+x, y: 0+y, cornerRadius: constants.NOTCH_RADIUS}
-        ];
+        return [p4, p3, p2, p1];
     }
 }
 

@@ -166,6 +166,7 @@ function recalculateAllLayouts() {
             let maxChildChainHeight = 0;
             let hasWrappableChildren = false;
 
+            // First, check real children
             for (const childConnection of Object.values(block.children)) {
                 const childBlock = appState.blockSpace[childConnection.id];
                 if (childBlock && childBlock.type !== 'block' && childBlock.type !== 'hat' && childBlock.type !== 'end') {
@@ -175,6 +176,23 @@ function recalculateAllLayouts() {
                     maxChildChainHeight = Math.max(maxChildChainHeight, height);
                 }
             }
+
+            // Second, check for unconnected inputs and factor in their default size
+            const unconnectedMalePoints = block.snapPoints.filter(p =>
+                p.role === 'male' &&
+                p.type !== 'block' &&
+                !block.children[p.name]
+            );
+
+            if (unconnectedMalePoints.length > 0) {
+                hasWrappableChildren = true;
+                // Assume a default 1x1 size for any blank input
+                const defaultWidth = 1 * constants.BLOCK_WIDTH;
+                const defaultHeight = 1 * constants.BLOCK_HEIGHT;
+                maxChildChainWidth = Math.max(maxChildChainWidth, defaultWidth);
+                maxChildChainHeight = Math.max(maxChildChainHeight, defaultHeight);
+            }
+
 
             const newSizes = JSON.parse(JSON.stringify(block.sizes));
             let sizeChanged = false;
@@ -262,13 +280,63 @@ function render() {
     renderSelectedBlockControls();
 }
 
+// --- CORRECTED FUNCTION START ---
 function generateShape(uuid, type, colors, sizes, snapPoints, text) {
-    const shapeData = blocks.Block(type, colors, sizes);
+    const blockData = appState.blockSpace[uuid];
     const blockElm = document.getElementById(uuid);
-    if (blockElm) {
-        svg.generate(blockElm, shapeData, text, getAppScale());
+    if (!blockElm || !blockData) return;
+
+    // 1. Generate the main block shape first.
+    const mainShapeData = blocks.Block(type, colors, sizes);
+    const scale = getAppScale();
+    svg.generate(blockElm, mainShapeData, text, scale);
+
+    // 2. Clear any old default shapes.
+    blockElm.querySelectorAll('.unconnected-point-shape').forEach(el => el.remove());
+
+    // 3. Find all relevant unconnected points.
+    const unconnectedMalePoints = blockData.snapPoints.filter(point =>
+        point.role === 'male' &&
+        point.type !== 'block' &&
+        !blockData.children[point.name]
+    );
+
+    // 4. For each point, draw its default shape inside the parent's SVG.
+    for (const point of unconnectedMalePoints) {
+        const defaultColors = { inner: blockData.colors.outer, outer: blockData.colors.outer };
+        const defaultSizes = [{ height: 1, width: 1, auto: { width: true, height: true }, customSnapPoints: [] }];
+        const defaultType = point.type;
+
+        const defaultShapeData = blocks.Block(defaultType, defaultColors, defaultSizes);
+        const femalePoint = defaultShapeData.snapPoints.find(p => p.role === 'female');
+        if (!femalePoint) continue;
+
+        // 5. *** THE FIX IS HERE ***
+        // Calculate the pixel offset by converting grid units to base pixels, then scaling.
+        const dx = (point.x - femalePoint.x)+1;
+        const dy = (point.y - femalePoint.y);
+
+        // 6. Create a group element and apply the correctly calculated transform.
+        const shapeGroup = document.createElementNS("http://www.w3.org/2000/svg", 'g');
+        shapeGroup.classList.add('unconnected-point-shape');
+        shapeGroup.style.pointerEvents = 'none';
+        shapeGroup.setAttribute('transform', `translate(${dx}, ${dy})`);
+
+        // 7. Generate the scaled shape into a temporary element.
+        const tempSvg = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
+        svg.generate(tempSvg, defaultShapeData, '', scale);
+
+        // 8. Move the generated path/text from the temp element into our positioned group.
+        while (tempSvg.firstChild) {
+            shapeGroup.appendChild(tempSvg.firstChild);
+        }
+
+        // 9. Append the finished group to the main block's SVG element.
+        blockElm.appendChild(shapeGroup);
     }
 }
+// --- CORRECTED FUNCTION END ---
+
 
 function renderBlocks() {
     const existingBlockIds = new Set(Array.from(dom.workSpace.querySelectorAll('svg[blocktype]')).map(el => el.id));
@@ -791,7 +859,7 @@ function setupEventListeners() {
             if (!newSizes[0].customSnapPoints) newSizes[0].customSnapPoints = [];
             let i = 0, newName;
             do { i++; newName = `custom_${i}`; } while (block.snapPoints.some(p => p.name === newName));
-            newSizes[0].customSnapPoints.push({ name: newName, role: 'male', type: 'any', x: 0, y: 0 });
+            newSizes[0].customSnapPoints.push({ name: newName, role: 'male', type: 'number', x: 0, y: 'center' });
             editBlock(appState.targetID, { sizes: newSizes });
             render();
         });
