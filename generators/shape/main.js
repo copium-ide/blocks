@@ -391,7 +391,9 @@ function renderSelectedBlockControls() {
         dom.slidersContainer.appendChild(branchDiv);
     });
 
-    const maleSnapPoints = currentBlock.snapPoints.filter(p => p.role === 'male');
+    const allMaleSnapPoints = currentBlock.snapPoints.filter(p => p.role === 'male');
+    const maleSnapPoints = [...new Map(allMaleSnapPoints.map(p => [p.name, p])).values()];
+
     let connectionCount = 0;
     maleSnapPoints.forEach(point => {
         const connection = currentBlock.children[point.name];
