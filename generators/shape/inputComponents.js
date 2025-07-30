@@ -31,7 +31,6 @@ export function input(colors, size, type) {
                 x: xPos,
                 y: yPos,
                 type: customPoint.type,
-                // FIX: Use the role provided in the custom point's data.
                 role: customPoint.role,
                 name: customPoint.name
             });

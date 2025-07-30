@@ -57,7 +57,7 @@ export function branch(colors, sizes, top, bottom) {
                 {x: 0, y: 0, cornerRadius: constants.CORNER_RADIUS},
             );
         }
-        addCustomSnaps(0, 0); // Add custom snaps for the only branch
+        // The redundant call to addCustomSnaps was here and has been removed.
     }
   
     // This is the loop for multi-branch blocks.
@@ -103,7 +103,7 @@ export function branch(colors, sizes, top, bottom) {
       }
       
       addCustomSnaps(i, offset); // Add custom snaps for the current branch
-      finalShape.snapPoints.push({ x: constants.LOOP_OFFSET + constants.NOTCH_CONNECT_X, y: offset + dHeight, type: 'block', role: 'male', name: 'topInner'+i});
+      finalShape.snapPoints.push({ x: 0, y: offset + dHeight, type: 'block', role: 'male', name: 'topInner'+i});
   
       finalShape.points.push(...shape);
       finalOffset = offset + dHeight + bHeight;
@@ -114,7 +114,8 @@ export function branch(colors, sizes, top, bottom) {
     let dHeight = sizes[sizes.length-1].height * constants.BLOCK_HEIGHT;
     let dWidth = sizes[sizes.length-1].width * constants.BLOCK_WIDTH;
     
-    addCustomSnaps(sizes.length - 1, finalOffset); // Add custom snaps for the last branch
+    // This call will now correctly handle both single-branch and multi-branch blocks.
+    addCustomSnaps(sizes.length - 1, finalOffset); 
 
     if (bottom === 'notch') {
         lastShape = [
@@ -145,6 +146,7 @@ function notch(x = 0, y = 0, inverted = false) {
     const flatWidth = constants.NOTCH_WIDTH * constants.NOTCH_RATIO;
 
     const slopedWidth = (constants.NOTCH_WIDTH - flatWidth) / 2;
+
 
     const p1 = {
         x: constants.NOTCH_START_X + x,

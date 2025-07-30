@@ -7,23 +7,15 @@ import * as constants from './constants.js';
 let appScale = 8;
 export function getAppScale() { return appScale; }
 const MIN_LOOP_HEIGHT = 0.5;
+const BLOCK_TYPES = ['hat', 'block', 'end', 'label', 'number', 'string', 'boolean', 'array', 'object'];
 
 // --- DOM Element References ---
 function getElements() {
     return {
         workSpace: document.getElementById('workspace'),
-        // Control Panel Sections
-        blockSelectorPanel: document.getElementById('block-selector-panel'),
-        blockPropertiesPanel: document.getElementById('block-properties-panel'),
-        connectionPropertiesPanel: document.getElementById('connection-properties-panel'),
-        snapPointsPanel: document.getElementById('snap-points-panel'),
-        creationPanel: document.getElementById('creation-panel'),
-        // Controls
-        slidersContainer: document.getElementById("sliders"),
-        connectionsList: document.getElementById('connections-list'),
-        snapPointsList: document.getElementById('snap-points-list'),
-        addSnapPointBtn: document.getElementById('add-snap-point-btn'),
-        addBranchBtn: document.getElementById('addBranch'),
+        controlsContainer: document.getElementById('controls-container'),
+        structureEditor: document.getElementById('structure-editor'),
+        newBlockTypeSelect: document.getElementById('new-block-type-select'),
         createBtn: document.getElementById('create'),
         removeBtn: document.getElementById('remove'),
         typeinput: document.getElementById("type"),
@@ -45,7 +37,6 @@ const appState = {
 
 // --- Utility Functions ---
 function getTextWidth(text, fontSize, font = 'sans-serif') {
-    // Re-usable canvas element for better performance
     const canvas = getTextWidth.canvas || (getTextWidth.canvas = document.createElement("canvas"));
     const context = canvas.getContext("2d");
     context.font = `${fontSize}px ${font}`;
@@ -77,162 +68,130 @@ function getDragGroup(blockId, allBlocks, group = []) {
     return group;
 }
 
+function populateCreateDropdown() {
+    if (!dom.newBlockTypeSelect) return;
+    BLOCK_TYPES.forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+        dom.newBlockTypeSelect.appendChild(option);
+    });
+}
+
 // --- Layout Calculation Logic (Reads from state) ---
 
 function getBlockVisualDimensions(blockId) {
     const block = appState.blockSpace[blockId];
-    if (!block || !block.sizes.length) return { width: 0, height: 0 };
-    
-    if (block.type !== 'block' && block.type !== 'hat' && block.type !== 'end') {
-         return {
-            width: block.sizes[0].width * constants.BLOCK_WIDTH / getAppScale(),
-            height: block.sizes[0].height * constants.BLOCK_HEIGHT / getAppScale()
-        };
+    if (!block) return { width: 0, height: 0 };
+
+    if (block.type === 'label') {
+        const FONT_SIZE_FOR_CALC = constants.FONT_SIZE;
+        const textWidthInPixels = getTextWidth(block.text || ' ', FONT_SIZE_FOR_CALC);
+        const widthInBlockUnits = (textWidthInPixels / constants.BLOCK_WIDTH)*0.8;
+        return { width: widthInBlockUnits, height: 1 };
     }
 
-    let totalHeight = 0;
-    let maxWidth = 0;
+    if (!block.sizes || !block.sizes.length) return { width: 0, height: 0 };
+
+    if (block.type !== 'block' && block.type !== 'hat' && block.type !== 'end') {
+         return { width: block.sizes[0].width, height: block.sizes[0].height };
+    }
+
+    let totalHeightUnits = 0;
+    let maxWidthUnits = 0;
     block.sizes.forEach(branch => {
-        totalHeight += branch.height * constants.BLOCK_HEIGHT;
-        if(branch.loop) {
-            totalHeight += branch.loop.height * constants.BLOCK_HEIGHT;
-        }
-        maxWidth = Math.max(maxWidth, branch.width * constants.BLOCK_WIDTH);
+        totalHeightUnits += branch.height;
+        if (branch.loop) totalHeightUnits += branch.loop.height;
+        maxWidthUnits = Math.max(maxWidthUnits, branch.width);
     });
-    
-    return {
-        width: maxWidth / getAppScale(),
-        height: totalHeight / getAppScale()
-    };
+
+    return { width: maxWidthUnits, height: totalHeightUnits };
 }
 
+
 function recalculateAllLayouts() {
-    const PADDING = 0.4;
+    const PADDING_AROUND_INPUTS = 0.2;
+    const BASE_HORIZONTAL_PADDING = 0.2;
+    const PADDING_ADJUSTMENT_FACTOR = 0.1;
+    const PADDING_BETWEEN_INPUTS = 0.3;
+    const DEFAULT_INPUT_WIDTH_UNITS = 1;
+    const DEFAULT_INPUT_HEIGHT_UNITS = 1;
 
     function getChainExtents(startBlockId) {
         if (!startBlockId) return { width: 0, height: 0 };
-        
-        let totalHeight = 0;
-        let maxWidth = 0;
-        let currentBlockId = startBlockId;
-
+        let totalHeightUnits = 0, maxWidthUnits = 0, currentBlockId = startBlockId;
         while (currentBlockId) {
             const currentBlock = appState.blockSpace[currentBlockId];
             if (!currentBlock) break;
-
             const dims = getBlockVisualDimensions(currentBlockId);
-            totalHeight += (dims.height * getAppScale());
-            maxWidth = Math.max(maxWidth, dims.width * getAppScale());
-            
+            totalHeightUnits += dims.height;
+            maxWidthUnits = Math.max(maxWidthUnits, dims.width);
             currentBlockId = currentBlock.children['bottom']?.id;
         }
-        return { width: maxWidth, height: totalHeight };
+        return { width: maxWidthUnits, height: totalHeightUnits };
     }
 
-    // --- Pass 1: Update sizes (Bottom-up using post-order traversal) ---
     const sized = new Set();
     function processBlockSize(blockId) {
         if (!blockId || sized.has(blockId)) return;
         const block = appState.blockSpace[blockId];
         if (!block) return;
 
-        for (const childConnection of Object.values(block.children)) {
-            processBlockSize(childConnection.id);
-        }
+        Object.values(block.children).forEach(c => processBlockSize(c.id));
 
         if (block.sizes?.some(s => s.loop)) {
-            const newSizes = JSON.parse(JSON.stringify(block.sizes));
-            let loopHeightChanged = false;
-            for (let i = 0; i < newSizes.length; i++) {
-                const branch = newSizes[i];
+            block.sizes.forEach((branch, i) => {
                 if (branch.loop) {
                     const innerChainStartId = block.children['topInner' + i]?.id;
-                    const chainHeight = getChainExtents(innerChainStartId).height;
-                    const newLoopHeight = (chainHeight / constants.BLOCK_HEIGHT) || MIN_LOOP_HEIGHT;
-                    if (branch.loop.height !== newLoopHeight) {
-                        branch.loop.height = newLoopHeight;
-                        loopHeightChanged = true;
-                    }
+                    const chainHeightUnits = getChainExtents(innerChainStartId).height;
+                    branch.loop.height = chainHeightUnits || MIN_LOOP_HEIGHT;
                 }
-            }
-            if (loopHeightChanged) {
-                editBlock(blockId, { sizes: newSizes });
-            }
-        }
-        
-        const mainBranch = block.sizes[0];
-        if (mainBranch && (mainBranch.auto.width || mainBranch.auto.height)) {
-            let maxChildChainWidth = 0;
-            let maxChildChainHeight = 0;
-            let hasWrappableChildren = false;
-
-            // First, check real children
-            for (const childConnection of Object.values(block.children)) {
-                const childBlock = appState.blockSpace[childConnection.id];
-                if (childBlock && childBlock.type !== 'block' && childBlock.type !== 'hat' && childBlock.type !== 'end') {
-                    hasWrappableChildren = true;
-                    const { width, height } = getChainExtents(childConnection.id);
-                    maxChildChainWidth = Math.max(maxChildChainWidth, width);
-                    maxChildChainHeight = Math.max(maxChildChainHeight, height);
-                }
-            }
-
-            // Second, check for unconnected inputs and factor in their default size
-            const unconnectedMalePoints = block.snapPoints.filter(p =>
-                p.role === 'male' &&
-                p.type !== 'block' &&
-                !block.children[p.name]
-            );
-
-            if (unconnectedMalePoints.length > 0) {
-                hasWrappableChildren = true;
-                // Assume a default 1x1 size for any blank input
-                const defaultWidth = 1 * constants.BLOCK_WIDTH;
-                const defaultHeight = 1 * constants.BLOCK_HEIGHT;
-                maxChildChainWidth = Math.max(maxChildChainWidth, defaultWidth);
-                maxChildChainHeight = Math.max(maxChildChainHeight, defaultHeight);
-            }
-
-
-            const newSizes = JSON.parse(JSON.stringify(block.sizes));
-            let sizeChanged = false;
-            const DEFAULT_AUTO_SIZE = 1;
-
-            if (hasWrappableChildren) {
-                if (mainBranch.auto.width) {
-                    const newWidth = (maxChildChainWidth / constants.BLOCK_WIDTH) + PADDING;
-                    if (newSizes[0].width !== newWidth) {
-                        newSizes[0].width = newWidth;
-                        sizeChanged = true;
-                    }
-                }
-                if (mainBranch.auto.height) {
-                    const newHeight = (maxChildChainHeight / constants.BLOCK_HEIGHT) + PADDING;
-                    if (newSizes[0].height !== newHeight) {
-                        newSizes[0].height = newHeight;
-                        sizeChanged = true;
-                    }
-                }
-            } else {
-                if (mainBranch.auto.width && newSizes[0].width !== DEFAULT_AUTO_SIZE) {
-                    newSizes[0].width = DEFAULT_AUTO_SIZE;
-                    sizeChanged = true;
-                }
-                if (mainBranch.auto.height && newSizes[0].height !== DEFAULT_AUTO_SIZE) {
-                    newSizes[0].height = DEFAULT_AUTO_SIZE;
-                    sizeChanged = true;
-                }
-            }
-
-            if (sizeChanged) {
-                editBlock(blockId, { sizes: newSizes });
-            }
+            });
         }
 
+        const isContainerBlock = ['block', 'hat', 'end'].includes(block.type);
+        block.sizes.forEach(branch => {
+            if (!branch.auto.width && !branch.auto.height) return;
+
+            let cumulativeWidthUnits = 0;
+            let maxChildHeightUnits = 0;
+            const inputs = branch.customSnapPoints || [];
+            
+            inputs.forEach(point => {
+                const childConnection = block.children[point.name];
+                let childWidth = DEFAULT_INPUT_WIDTH_UNITS;
+                let childHeight = DEFAULT_INPUT_HEIGHT_UNITS;
+
+                if (childConnection) {
+                    const childBlock = appState.blockSpace[childConnection.id];
+                    const childDims = getBlockVisualDimensions(childConnection.id);
+                    childWidth = childDims.width;
+                    childHeight = childDims.height;
+                    if (isContainerBlock || childBlock.type !== 'label') {
+                        maxChildHeightUnits = Math.max(maxChildHeightUnits, childHeight);
+                    }
+                } else {
+                    maxChildHeightUnits = Math.max(maxChildHeightUnits, childHeight);
+                }
+                cumulativeWidthUnits += childWidth;
+            });
+            
+            if (inputs.length > 1) {
+                cumulativeWidthUnits += ((inputs.length - 1) * PADDING_BETWEEN_INPUTS);
+            }
+
+            if (branch.auto.width) {
+                const paddingSign = isContainerBlock ? 1 : -1;
+                branch.width = (inputs.length > 0)
+                    ? cumulativeWidthUnits + BASE_HORIZONTAL_PADDING + (PADDING_ADJUSTMENT_FACTOR * paddingSign) : 1;
+            }
+            if (branch.auto.height) {
+                branch.height = (maxChildHeightUnits > 0) ? maxChildHeightUnits + PADDING_AROUND_INPUTS * 2 : 1;
+            }
+        });
         sized.add(blockId);
     }
 
-    // --- Pass 2: Update positions (Top-down using pre-order traversal) ---
     const positioned = new Set();
     function processBlockPosition(blockId) {
         if (!blockId || positioned.has(blockId)) return;
@@ -242,14 +201,10 @@ function recalculateAllLayouts() {
         const parentId = block.parent;
         if (parentId) {
             const parentBlock = appState.blockSpace[parentId];
-            const parentSnapPointName = Object.keys(parentBlock.children).find(
-                key => parentBlock.children[key].id === blockId
-            );
-
+            const parentSnapPointName = Object.keys(parentBlock.children).find(key => parentBlock.children[key].id === blockId);
             if (parentSnapPointName) {
                 const parentMalePoint = parentBlock.snapPoints.find(p => p.name === parentSnapPointName);
                 const childFemalePoint = block.snapPoints.find(p => p.role === 'female');
-                
                 if (parentMalePoint && childFemalePoint) {
                     const scale = getAppScale();
                     block.transform.x = parentBlock.transform.x + (parentMalePoint.x * scale) - (childFemalePoint.x * scale);
@@ -258,18 +213,59 @@ function recalculateAllLayouts() {
             }
         }
         positioned.add(blockId);
-
-        for (const childConnection of Object.values(block.children)) {
-            processBlockPosition(childConnection.id);
-        }
+        Object.values(block.children).forEach(c => processBlockPosition(c.id));
     }
 
-    // --- Execution ---
     const topLevelBlocks = Object.values(appState.blockSpace).filter(b => !b.parent);
     topLevelBlocks.forEach(block => processBlockSize(block.uuid));
+
+    for (const block of Object.values(appState.blockSpace)) {
+        const templateShape = blocks.Block(block.type, block.colors, block.sizes);
+        let yOffset = 0;
+
+        block.sizes.forEach((branch, branchIndex) => {
+            const branchWidth = branch.width * constants.BLOCK_WIDTH;
+            const inputs = branch.customSnapPoints || [];
+            let totalInputWidth = 0;
+            const inputWidths = [];
+
+            inputs.forEach(point => {
+                const childConnection = block.children[point.name];
+                let childWidth = DEFAULT_INPUT_WIDTH_UNITS;
+                if (childConnection) {
+                    childWidth = getBlockVisualDimensions(childConnection.id).width;
+                }
+                inputWidths.push(childWidth * constants.BLOCK_WIDTH);
+            });
+
+            totalInputWidth = inputWidths.reduce((a, b) => a + b, 0);
+            if (inputs.length > 1) {
+                totalInputWidth += (inputs.length - 1) * (PADDING_BETWEEN_INPUTS * constants.BLOCK_WIDTH);
+            }
+
+            // CHANGED: Replaced the centering calculation with 0.
+            // This makes the first input start at the far left of the content area.
+            let currentX = 0;
+
+            inputs.forEach((point, pointIndex) => {
+                const snapPointInTemplate = templateShape.snapPoints.find(p => p.name === point.name);
+                if (snapPointInTemplate) {
+                    const inputWidth = inputWidths[pointIndex];
+                    snapPointInTemplate.x = currentX;
+                    currentX += inputWidth + (PADDING_BETWEEN_INPUTS * constants.BLOCK_WIDTH);
+                }
+            });
+
+            yOffset += branch.height * constants.BLOCK_HEIGHT;
+            if (branch.loop) {
+                yOffset += branch.loop.height * constants.BLOCK_HEIGHT;
+            }
+        });
+        block.snapPoints = templateShape.snapPoints;
+    }
+
     topLevelBlocks.forEach(block => processBlockPosition(block.uuid));
 }
-
 
 // --- Rendering Logic (Reads from state, writes to DOM) ---
 
@@ -280,85 +276,90 @@ function render() {
     renderSelectedBlockControls();
 }
 
-// --- CORRECTED FUNCTION START ---
 function generateShape(uuid, type, colors, sizes, snapPoints, text) {
     const blockData = appState.blockSpace[uuid];
     const blockElm = document.getElementById(uuid);
     if (!blockElm || !blockData) return;
 
-    // 1. Generate the main block shape first.
-    const mainShapeData = blocks.Block(type, colors, sizes);
     const scale = getAppScale();
+    
+    // 1. Generate the main block's shape
+    const mainShapeData = blocks.Block(type, colors, sizes);
+    mainShapeData.snapPoints = snapPoints; // Use the calculated snap points from layout
     svg.generate(blockElm, mainShapeData, text, scale);
 
-    // 2. Clear any old default shapes.
+    // 2. Clear any old placeholder shapes
     blockElm.querySelectorAll('.unconnected-point-shape').forEach(el => el.remove());
 
-    // 3. Find all relevant unconnected points.
+    // 3. Find snap points that need a placeholder
     const unconnectedMalePoints = blockData.snapPoints.filter(point =>
         point.role === 'male' &&
-        point.type !== 'block' &&
+        point.type !== 'block' && 
         !blockData.children[point.name]
     );
 
-    // 4. For each point, draw its default shape inside the parent's SVG.
+    // 4. Loop through them and generate a placeholder for each
     for (const point of unconnectedMalePoints) {
-        const defaultColors = { inner: blockData.colors.outer, outer: blockData.colors.outer };
-        const defaultSizes = [{ height: 1, width: 1, auto: { width: true, height: true }, customSnapPoints: [] }];
+        // a. Define placeholder properties
         const defaultType = point.type;
+        const defaultColors = { inner: blockData.colors.outer, outer: blockData.colors.outer };
+        const defaultSizes = [{
+            height: 1,
+            width: 1,
+            auto: { width: true, height: true },
+            customSnapPoints: []
+        }];
 
+        // b. Create the template shape for the placeholder
         const defaultShapeData = blocks.Block(defaultType, defaultColors, defaultSizes);
         const femalePoint = defaultShapeData.snapPoints.find(p => p.role === 'female');
+
         if (!femalePoint) continue;
 
-        // 5. *** THE FIX IS HERE ***
-        // Calculate the pixel offset by converting grid units to base pixels, then scaling.
+        // c. Calculate the translation needed. These coordinates are already scaled.
         const dx = (point.x - femalePoint.x)+1;
         const dy = (point.y - femalePoint.y);
 
-        // 6. Create a group element and apply the correctly calculated transform.
+        // d. Create the SVG group element for the placeholder
         const shapeGroup = document.createElementNS("http://www.w3.org/2000/svg", 'g');
         shapeGroup.classList.add('unconnected-point-shape');
         shapeGroup.style.pointerEvents = 'none';
+        
+        // CHANGED: Removed the multiplication by 'scale'. 
+        // The dx and dy values are already in the correct coordinate space.
         shapeGroup.setAttribute('transform', `translate(${dx}, ${dy})`);
 
-        // 7. Generate the scaled shape into a temporary element.
+        // e. Generate the placeholder's SVG path into a temporary element
         const tempSvg = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
-        svg.generate(tempSvg, defaultShapeData, '', scale);
+        svg.generate(tempSvg, defaultShapeData, '', scale); // No text in placeholders
 
-        // 8. Move the generated path/text from the temp element into our positioned group.
+        // f. Move the generated paths from the temp container to our group
         while (tempSvg.firstChild) {
             shapeGroup.appendChild(tempSvg.firstChild);
         }
 
-        // 9. Append the finished group to the main block's SVG element.
+        // g. Append the finished placeholder to the main block's SVG
         blockElm.appendChild(shapeGroup);
     }
 }
-// --- CORRECTED FUNCTION END ---
-
 
 function renderBlocks() {
     const existingBlockIds = new Set(Array.from(dom.workSpace.querySelectorAll('svg[blocktype]')).map(el => el.id));
     const stateBlockIds = new Set(Object.keys(appState.blockSpace));
 
     for (const id of existingBlockIds) {
-        if (!stateBlockIds.has(id)) {
-            document.getElementById(id)?.remove();
-        }
+        if (!stateBlockIds.has(id)) document.getElementById(id)?.remove();
     }
 
     for (const id of stateBlockIds) {
         const blockData = appState.blockSpace[id];
         let blockElm = document.getElementById(id);
-
         if (!blockElm) {
             blockElm = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
             blockElm.id = id;
             blockElm.setAttribute("blocktype", blockData.type);
             dom.workSpace.appendChild(blockElm);
         }
-
         blockElm.setAttribute('x', blockData.transform.x);
         blockElm.setAttribute('y', blockData.transform.y);
         
@@ -368,232 +369,118 @@ function renderBlocks() {
 
 function populateSelector() {
     if (!dom.uuidinput) return;
-    
     const currentTargetId = appState.targetID;
     clearNode(dom.uuidinput);
-
     for (const key in appState.blockSpace) {
         const option = document.createElement('option');
         option.value = key;
         option.textContent = `${appState.blockSpace[key].type} (${key.substring(0, 8)})`;
         dom.uuidinput.appendChild(option);
     }
-
-    if (currentTargetId) {
-        dom.uuidinput.value = currentTargetId;
-    }
+    if (currentTargetId) dom.uuidinput.value = currentTargetId;
 }
 
 function renderSelectedBlockControls() {
-    clearNode(dom.slidersContainer);
-    clearNode(dom.connectionsList);
-    clearNode(dom.snapPointsList);
+    const editor = dom.structureEditor;
+    if (!editor) return;
+    clearNode(editor);
 
     const currentBlock = appState.blockSpace[appState.targetID];
+    if (!currentBlock) return;
 
-    if (!currentBlock) {
-        dom.blockPropertiesPanel.style.display = 'none';
-        dom.connectionPropertiesPanel.style.display = 'none';
-        dom.snapPointsPanel.style.display = 'none';
-        return;
-    }
-
-    dom.blockPropertiesPanel.style.display = 'block';
     dom.typeinput.value = currentBlock.type;
+    dom.textInput.value = currentBlock.text;
     dom.color1input.value = currentBlock.colors.inner;
     dom.color2input.value = currentBlock.colors.outer;
-    dom.textInput.value = currentBlock.text || '';
 
-    const textInputLabel = document.querySelector(`label[for="text-input"]`);
-    dom.textInput.style.display = '';
-    if (textInputLabel) {
-        textInputLabel.style.display = '';
-    }
+    const isContainer = ['block', 'hat', 'end'].includes(currentBlock.type);
 
-    const { type, sizes } = currentBlock;
-    const isBranchBlock = ['block', 'hat', 'end'].includes(type);
-    dom.addBranchBtn.style.display = isBranchBlock ? 'block' : 'none';
-
-    sizes.forEach((branch, index) => {
-        const branchDiv = document.createElement("div");
-        branchDiv.className = "branch-slider";
-        const header = document.createElement('h4');
-        header.textContent = isBranchBlock ? `Branch ${index + 1}` : 'Dimensions';
-        branchDiv.appendChild(header);
-
-        if (isBranchBlock && sizes.length > 1) {
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'remove-branch';
-            removeBtn.textContent = 'X';
-            removeBtn.dataset.index = index;
-            header.appendChild(removeBtn);
-        }
-
-        const createAutoSlider = (labelText, prop, min, max, step, value, autoState) => {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'auto-slider-wrapper';
-
-            const label = document.createElement('label');
-            label.textContent = `${labelText}: `;
-            const input = document.createElement('input');
-            input.type = 'range';
-            input.min = min; input.max = max; input.step = step; input.value = value;
-            input.dataset.index = index; input.dataset.prop = prop;
-            input.className = 'branch-input';
-            input.disabled = autoState;
-            label.appendChild(input);
-
-            const autoLabel = document.createElement('label');
-            const autoCheckbox = document.createElement('input');
-            autoCheckbox.type = 'checkbox';
-            autoCheckbox.checked = autoState;
-            autoCheckbox.className = 'auto-size-checkbox';
-            autoCheckbox.dataset.index = index;
-            autoCheckbox.dataset.prop = prop;
-            autoLabel.appendChild(autoCheckbox);
-            autoLabel.appendChild(document.createTextNode(' Auto'));
-            
-            wrapper.appendChild(label);
-            wrapper.appendChild(autoLabel);
-            return wrapper;
-        };
-
-        branchDiv.appendChild(createAutoSlider('Height', 'height', 0.5, 10, 0.1, branch.height, branch.auto.height));
-        branchDiv.appendChild(createAutoSlider('Width', 'width', 0.5, 10, 0.1, branch.width, branch.auto.width));
-
-
-        if (branch.loop) {
-            const loopLabel = document.createElement('label');
-            loopLabel.textContent = `Loop Height: ${branch.loop.height.toFixed(1)} (auto)`;
-            branchDiv.appendChild(loopLabel);
-        }
-        dom.slidersContainer.appendChild(branchDiv);
-    });
-
-    const allMaleSnapPoints = currentBlock.snapPoints.filter(p => p.role === 'male');
-    const maleSnapPoints = [...new Map(allMaleSnapPoints.map(p => [p.name, p])).values()];
-
-    let connectionCount = 0;
-    maleSnapPoints.forEach(point => {
-        const connection = currentBlock.children[point.name];
-        if (connection) {
-            connectionCount++;
-            const childBlock = appState.blockSpace[connection.id];
-            const childName = childBlock ? `${childBlock.type} (${childBlock.uuid.substring(0, 4)})` : '...';
-            const div = document.createElement('div');
-            div.className = 'connection-item';
-            const textSpan = document.createElement('span');
-            textSpan.innerHTML = `<b>${point.name}</b> → ${childName}`;
-            const lockLabel = document.createElement('label');
-            lockLabel.style.cursor = 'pointer';
-            const lockCheckbox = document.createElement('input');
-            lockCheckbox.type = 'checkbox';
-            lockCheckbox.checked = connection.locked;
-            lockCheckbox.dataset.pointName = point.name;
-            lockLabel.appendChild(lockCheckbox);
-            lockLabel.appendChild(document.createTextNode(' Locked'));
-            div.appendChild(textSpan);
-            div.appendChild(document.createElement('br'));
-            div.appendChild(lockLabel);
-            dom.connectionsList.appendChild(div);
-        }
-    });
-    dom.connectionPropertiesPanel.style.display = connectionCount > 0 ? 'block' : 'none';
-
-    dom.snapPointsPanel.style.display = 'block';
-    
-    currentBlock.snapPoints.forEach(point => {
-        const isCustom = currentBlock.sizes.some(s => s.customSnapPoints?.some(cp => cp.name === point.name));
-        if (isCustom) return;
-
-        const isConnected = !!currentBlock.children[point.name];
-        const div = document.createElement('div');
-        div.className = 'snap-point-item default-point';
-        let connectionInfo = isConnected ? `<span class="connected"> (Connected)</span>` : '';
-        const infoSpan = document.createElement('span');
-        infoSpan.innerHTML = `<b>${point.name}</b> (${point.role}, ${point.type})${connectionInfo}`;
-        div.appendChild(infoSpan);
-        dom.snapPointsList.appendChild(div);
-    });
-
+    const branchStack = document.createElement('div');
+    branchStack.className = 'branch-stack';
     currentBlock.sizes.forEach((branch, branchIndex) => {
-        if (!branch.customSnapPoints) return;
+        const branchItem = document.createElement('div');
+        branchItem.className = 'branch-item';
+        branchItem.dataset.branchIndex = branchIndex;
+        if (isContainer) branchItem.setAttribute('draggable', 'true');
 
-        branch.customSnapPoints.forEach((point, customPointIndex) => {
-            const div = document.createElement('div');
-            div.className = 'snap-point-item';
-            const editorDiv = document.createElement('div');
-            editorDiv.className = 'snap-point-editor';
+        const branchHeader = document.createElement('div');
+        branchHeader.className = 'branch-header';
+        if (isContainer) {
+            branchHeader.innerHTML = `<span class="drag-handle branch-handle">::</span>`;
+        }
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'branch-name-input';
+        nameInput.value = branch.name || `Branch ${branchIndex + 1}`;
+        nameInput.dataset.branchIndex = branchIndex;
+        branchHeader.appendChild(nameInput);
 
-            const createTextInput = (label, prop, value) => {
-                const wrapper = document.createElement('div');
-                const id = `snap-editor-${currentBlock.uuid}-${customPointIndex}-${prop}`;
-                const labelEl = document.createElement('label');
-                labelEl.textContent = `${label}: `;
-                labelEl.htmlFor = id;
-                const inputEl = document.createElement('input');
-                inputEl.id = id;
-                inputEl.type = 'text';
-                inputEl.value = value;
-                inputEl.className = 'snap-point-input';
-                inputEl.dataset.branchIndex = branchIndex;
-                inputEl.dataset.pointIndex = customPointIndex;
-                inputEl.dataset.prop = prop;
-                wrapper.appendChild(labelEl);
-                wrapper.appendChild(inputEl);
-                return wrapper;
-            };
+        if (isContainer && currentBlock.sizes.length > 1) {
+            const removeBranchBtn = document.createElement('button');
+            removeBranchBtn.textContent = 'X';
+            removeBranchBtn.className = 'remove-branch-btn';
+            removeBranchBtn.dataset.branchIndex = branchIndex;
+            branchHeader.appendChild(removeBranchBtn);
+        }
+        branchItem.appendChild(branchHeader);
 
-            const createSelect = (label, prop, options, value) => {
-                const wrapper = document.createElement('div');
-                const id = `snap-editor-${currentBlock.uuid}-${customPointIndex}-${prop}`;
-                const labelEl = document.createElement('label');
-                labelEl.textContent = `${label}: `;
-                labelEl.htmlFor = id;
-                const selectEl = document.createElement('select');
-                selectEl.id = id;
-                selectEl.className = 'snap-point-input';
-                selectEl.dataset.branchIndex = branchIndex;
-                selectEl.dataset.pointIndex = customPointIndex;
-                selectEl.dataset.prop = prop;
-                options.forEach(opt => {
-                    const optionEl = document.createElement('option');
-                    optionEl.value = opt;
-                    optionEl.textContent = opt;
-                    if (opt === value) optionEl.selected = true;
-                    selectEl.appendChild(optionEl);
-                });
-                wrapper.appendChild(labelEl);
-                wrapper.appendChild(selectEl);
-                return wrapper;
-            };
+        const inputZone = document.createElement('div');
+        inputZone.className = 'input-zone';
+        inputZone.dataset.branchIndex = branchIndex;
 
-            editorDiv.appendChild(createTextInput('X', 'x', point.x));
-            editorDiv.appendChild(createTextInput('Y', 'y', point.y));
-            editorDiv.appendChild(createSelect('Role', 'role', ['male', 'female'], point.role));
-            editorDiv.appendChild(createTextInput('Name', 'name', point.name));
-            editorDiv.appendChild(createTextInput('Type', 'type', point.type));
-            
-            const removeBtn = document.createElement('button');
-            removeBtn.textContent = 'Remove';
-            removeBtn.className = 'remove-snap-point';
-            removeBtn.dataset.branchIndex = branchIndex;
-            removeBtn.dataset.pointIndex = customPointIndex;
-            editorDiv.appendChild(removeBtn);
+        const inputs = branch.customSnapPoints || [];
+        inputs.forEach((point, pointIndex) => {
+            const inputItem = document.createElement('div');
+            inputItem.className = 'input-item';
+            inputItem.dataset.branchIndex = branchIndex;
+            inputItem.dataset.pointIndex = pointIndex;
+            inputItem.setAttribute('draggable', 'true');
 
-            div.appendChild(editorDiv);
-            dom.snapPointsList.appendChild(div);
+            const childConnection = currentBlock.children[point.name];
+            const isConnected = !!childConnection;
+            const isLocked = isConnected && childConnection.locked;
+
+            inputItem.innerHTML = `
+                <span class="drag-handle input-handle">::</span>
+                <input type="text" class="input-prop" data-prop="name" value="${point.name}" placeholder="name">
+                <input type="text" class="input-prop" data-prop="type" value="${point.type}" placeholder="type">
+                <select class="input-prop" data-prop="role">
+                    <option value="male" ${point.role === 'male' ? 'selected' : ''}>Male</option>
+                    <option value="female" ${point.role === 'female' ? 'selected' : ''}>Female</option>
+                </select>
+                <label class="lock-label">
+                    <input type="checkbox" class="lock-toggle" data-input-name="${point.name}" ${!isConnected ? 'disabled' : ''} ${isLocked ? 'checked' : ''}>
+                    Lock
+                </label>
+                <button class="remove-input-btn">X</button>
+            `;
+            inputZone.appendChild(inputItem);
         });
-    });
-}
 
+        const addInputBtn = document.createElement('button');
+        addInputBtn.textContent = '+';
+        addInputBtn.className = 'add-input-btn';
+        addInputBtn.dataset.branchIndex = branchIndex;
+        inputZone.appendChild(addInputBtn);
+        branchItem.appendChild(inputZone);
+
+        branchStack.appendChild(branchItem);
+    });
+    editor.appendChild(branchStack);
+
+    if (isContainer) {
+        const addBranchBtn = document.createElement('button');
+        addBranchBtn.textContent = 'Add Branch';
+        addBranchBtn.className = 'add-branch-btn';
+        editor.appendChild(addBranchBtn);
+    }
+}
 
 // --- Core Application Logic / "Actions" ---
 
 function setParent(childId, newParentId, parentSnapPointName, isLocked = false) {
     const childBlock = appState.blockSpace[childId];
     if (!childBlock) return;
-
     const oldParentId = childBlock.parent;
     if (oldParentId && appState.blockSpace[oldParentId]) {
         const oldParent = appState.blockSpace[oldParentId];
@@ -604,57 +491,16 @@ function setParent(childId, newParentId, parentSnapPointName, isLocked = false) 
             }
         }
     }
-
     childBlock.parent = newParentId;
     if (newParentId && parentSnapPointName && appState.blockSpace[newParentId]) {
-        appState.blockSpace[newParentId].children[parentSnapPointName] = {
-            id: childId,
-            locked: isLocked
-        };
+        appState.blockSpace[newParentId].children[parentSnapPointName] = { id: childId, locked: isLocked };
     }
 }
 
 function editBlock(uuid, updates) {
     const block = appState.blockSpace[uuid];
     if (!block) return;
-
-    let needsRegeneration = false;
-
-    if (updates.colors) {
-        block.colors = updates.colors;
-    }
-    if (updates.text !== undefined) {
-        block.text = updates.text;
-    }
-    if (updates.sizes) {
-        block.sizes = updates.sizes;
-        needsRegeneration = true;
-    }
-    if (updates.type && updates.type !== block.type) {
-        block.type = updates.type;
-        needsRegeneration = true;
-
-        // --- MODIFIED ---
-        // All special text handling for type changes has been removed.
-        // The text property now persists across all type changes.
-        // --- END MODIFICATION ---
-
-        const newTypeIsBranch = ['block', 'hat', 'end'].includes(updates.type);
-        block.sizes = block.sizes.map(s => {
-            const newSize = { ...s };
-            if (newTypeIsBranch) {
-                if (!newSize.loop) newSize.loop = { height: MIN_LOOP_HEIGHT };
-            } else {
-                delete newSize.loop;
-            }
-            return newSize;
-        });
-    }
-
-    if (needsRegeneration) {
-        const shapeData = blocks.Block(block.type, block.colors, block.sizes);
-        block.snapPoints = shapeData.snapPoints;
-    }
+    Object.assign(block, updates);
 }
 
 function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
@@ -662,27 +508,24 @@ function createBlock(type, colors = { inner: "#4A90E2", outer: "#196ECF" }) {
     do { uuid = crypto.randomUUID(); } while (appState.blockSpace.hasOwnProperty(uuid));
 
     const isBranch = ['block', 'hat', 'end'].includes(type);
-
-    // --- MODIFIED ---
-    // Simplified size creation. `auto` is now consistent for all new blocks.
-    const sizes = [{ 
-        height: 1, 
-        width: 1,
+    const sizes = [{
+        name: "Branch 1",
+        height: 1, width: 1,
         auto: { width: true, height: true },
         loop: isBranch ? { height: MIN_LOOP_HEIGHT } : undefined,
         customSnapPoints: []
     }];
-    // --- END MODIFICATION ---
+
+    const workspaceRect = dom.workSpace.getBoundingClientRect();
+    const spawnX = (workspaceRect.width / 2);
+    const spawnY = (workspaceRect.height / 2);
 
     const blockData = blocks.Block(type, colors, sizes);
-
     appState.blockSpace[uuid] = {
-        type, uuid, colors, sizes,
-        text: '', // All blocks start with empty text.
+        type, uuid, colors, sizes, text: '',
         snapPoints: blockData.snapPoints,
-        transform: { x: 420, y: 50 },
-        parent: null,
-        children: {}
+        transform: { x: spawnX, y: spawnY },
+        parent: null, children: {}
     };
     appState.targetID = uuid;
     render();
@@ -692,9 +535,7 @@ function removeBlock(uuid) {
     if (!appState.blockSpace[uuid]) return;
     handleDetach(uuid, null, false);
     const groupToRemove = getDragGroup(uuid, appState.blockSpace, []);
-
     groupToRemove.forEach(id => delete appState.blockSpace[id]);
-
     if (groupToRemove.includes(appState.targetID)) {
         const remainingKeys = Object.keys(appState.blockSpace);
         appState.targetID = remainingKeys.length > 0 ? remainingKeys[0] : null;
@@ -705,8 +546,17 @@ function removeBlock(uuid) {
 // --- Drag and Drop Handlers ---
 
 function handleSelect(blockId) {
-    if (appState.targetID !== blockId) {
-        appState.targetID = blockId;
+    const block = appState.blockSpace[blockId];
+    if (!block) return;
+    let finalTargetId = blockId;
+    const parentId = block.parent;
+    if (parentId && appState.blockSpace[parentId]) {
+        const parentBlock = appState.blockSpace[parentId];
+        const connectionInfo = Object.values(parentBlock.children).find(child => child.id === blockId);
+        if (connectionInfo && connectionInfo.locked) finalTargetId = parentId;
+    }
+    if (appState.targetID !== finalTargetId) {
+        appState.targetID = finalTargetId;
         render();
     }
 }
@@ -714,27 +564,17 @@ function handleSelect(blockId) {
 function handleDetach(childId, restorableConnection, shouldRender = true) {
     const childBlock = appState.blockSpace[childId];
     if (!childBlock || !childBlock.parent) return;
-
     setParent(childId, null, null);
-
     if (restorableConnection) {
-        setParent(
-            restorableConnection.childId, 
-            restorableConnection.parentId, 
-            restorableConnection.snapPointName,
-            restorableConnection.locked
-        );
+        setParent(restorableConnection.childId, restorableConnection.parentId, restorableConnection.snapPointName, restorableConnection.locked);
     }
-
-    if (shouldRender) {
-        render();
-    }
+    if (shouldRender) render();
 }
 
 function handleSnap(draggedBlockId, finalTransform, snapInfo) {
     const mainDraggedBlock = appState.blockSpace[draggedBlockId];
     if (!mainDraggedBlock) return;
-
+    
     mainDraggedBlock.transform.x = finalTransform.x;
     mainDraggedBlock.transform.y = finalTransform.y;
 
@@ -755,80 +595,64 @@ function handleSnap(draggedBlockId, finalTransform, snapInfo) {
     render();
 }
 
+function makePanelDraggable(panel, handle) {
+    let isDragging = false;
+    let offsetX, offsetY;
+
+    handle.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        offsetX = e.clientX - panel.offsetLeft;
+        offsetY = e.clientY - panel.offsetTop;
+        panel.style.userSelect = 'none';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            panel.style.left = `${e.clientX - offsetX}px`;
+            panel.style.top = `${e.clientY - offsetY}px`;
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        isDragging = false;
+        panel.style.userSelect = 'auto';
+    });
+}
+
+
 // --- Event Listener Setup ---
 
 function setupEventListeners() {
     window.addEventListener('resize', setupWorkspaceViewBox);
-
     if (dom.appScaleSlider) {
         dom.appScaleSlider.addEventListener('input', () => {
             appScale = parseInt(dom.appScaleSlider.value, 10);
-            if (dom.appScaleValue) dom.appScaleValue.textContent = appScale;
+            dom.appScaleValue.textContent = appScale;
             render();
         });
     }
 
-    if (dom.slidersContainer) {
-        dom.slidersContainer.addEventListener('input', (event) => {
-            if (!event.target.matches('.branch-input') || !appState.targetID) return;
-            const block = appState.blockSpace[appState.targetID];
-            const idx = parseInt(event.target.dataset.index);
-            const prop = event.target.dataset.prop;
-            const value = parseFloat(event.target.value);
-            const newSizes = JSON.parse(JSON.stringify(block.sizes));
-            newSizes[idx][prop] = value;
-            
-            editBlock(appState.targetID, { sizes: newSizes });
-            render();
-        });
-
-        dom.slidersContainer.addEventListener('click', (event) => {
-            if (event.target.matches('.auto-size-checkbox')) {
-                const block = appState.blockSpace[appState.targetID];
-                const idx = parseInt(event.target.dataset.index);
-                const prop = event.target.dataset.prop;
-                const newSizes = JSON.parse(JSON.stringify(block.sizes));
-                newSizes[idx].auto[prop] = event.target.checked;
-                editBlock(appState.targetID, { sizes: newSizes });
-                render();
-            } else if (event.target.matches('.remove-branch')) {
-                 const idx = parseInt(event.target.dataset.index);
-                const block = appState.blockSpace[appState.targetID];
-                if (block.sizes.length > 1) {
-                    const newSizes = block.sizes.filter((_, index) => index !== idx);
-                    editBlock(appState.targetID, { sizes: newSizes });
-                    render(); 
-                }
-            }
-        });
-    }
-
-    if (dom.connectionsList) {
-        dom.connectionsList.addEventListener('change', (event) => {
-            if (event.target.type === 'checkbox' && appState.targetID) {
-                const pointName = event.target.dataset.pointName;
-                const block = appState.blockSpace[appState.targetID];
-                if (block && block.children[pointName]) {
-                    block.children[pointName].locked = event.target.checked;
-                }
-            }
-        });
-    }
-    
-    const controls = [dom.color1input, dom.color2input, dom.typeinput, dom.textInput];
-    controls.forEach(input => {
+    const generalControls = [dom.color1input, dom.color2input, dom.typeinput, dom.textInput];
+    generalControls.forEach(input => {
         if (!input) return;
         input.addEventListener('change', () => {
             if (!appState.targetID) return;
+            const block = appState.blockSpace[appState.targetID];
             const updates = {};
             if (input === dom.typeinput) {
+                const newTypeIsBranch = ['block', 'hat', 'end'].includes(dom.typeinput.value);
                 updates.type = dom.typeinput.value;
-            } else if (input === dom.textInput) {
-                updates.text = dom.textInput.value;
-            } else if (input === dom.color1input || input === dom.color2input) {
+                updates.sizes = [{
+                    name: "Branch 1", height: 1, width: 1,
+                    auto: { width: true, height: true },
+                    loop: newTypeIsBranch ? { height: MIN_LOOP_HEIGHT } : undefined,
+                    customSnapPoints: []
+                }];
+            }
+            else if (input === dom.textInput) updates.text = dom.textInput.value;
+            else if (input === dom.color1input || input === dom.color2input) {
                 updates.colors = { inner: dom.color1input.value, outer: dom.color2input.value };
             }
-            
             editBlock(appState.targetID, updates);
             render();
         });
@@ -841,78 +665,138 @@ function setupEventListeners() {
         });
     }
 
-    if (dom.addBranchBtn) {
-        dom.addBranchBtn.addEventListener('click', () => {
-            if (!appState.targetID) return;
-            const block = appState.blockSpace[appState.targetID];
-            const newSizes = [...block.sizes, { height: 1, width: 1, auto: { width: false, height: false }, loop: { height: MIN_LOOP_HEIGHT } }];
-            editBlock(appState.targetID, { sizes: newSizes });
-            render();
+    if (dom.createBtn) {
+        dom.createBtn.addEventListener('click', () => {
+            if (dom.newBlockTypeSelect) {
+                createBlock(dom.newBlockTypeSelect.value);
+            }
         });
     }
+    if (dom.removeBtn) dom.removeBtn.addEventListener('click', () => { if (appState.targetID) removeBlock(appState.targetID); });
 
-    if (dom.addSnapPointBtn) {
-        dom.addSnapPointBtn.addEventListener('click', () => {
-            if (!appState.targetID) return;
-            const block = appState.blockSpace[appState.targetID];
-            const newSizes = JSON.parse(JSON.stringify(block.sizes));
-            if (!newSizes[0].customSnapPoints) newSizes[0].customSnapPoints = [];
+    const editor = dom.structureEditor;
+    if (!editor) return;
+
+    editor.addEventListener('click', (e) => {
+        const block = appState.blockSpace[appState.targetID];
+        if (!block) return;
+
+        if (e.target.matches('.add-branch-btn')) {
+            block.sizes.push({
+                name: `Branch ${block.sizes.length + 1}`,
+                height: 1, width: 1, auto: { width: true, height: true },
+                loop: { height: MIN_LOOP_HEIGHT }, customSnapPoints: []
+            });
+            render();
+        } else if (e.target.matches('.remove-branch-btn')) {
+            const branchIndex = parseInt(e.target.closest('.branch-item').dataset.branchIndex, 10);
+            if (block.sizes.length > 1) {
+                block.sizes.splice(branchIndex, 1);
+                render();
+            }
+        } else if (e.target.matches('.add-input-btn')) {
+            const branchIndex = parseInt(e.target.closest('.branch-item').dataset.branchIndex, 10);
+            const branch = block.sizes[branchIndex];
+            if (!branch.customSnapPoints) branch.customSnapPoints = [];
             let i = 0, newName;
-            do { i++; newName = `custom_${i}`; } while (block.snapPoints.some(p => p.name === newName));
-            newSizes[0].customSnapPoints.push({ name: newName, role: 'male', type: 'number', x: 0, y: 'center' });
-            editBlock(appState.targetID, { sizes: newSizes });
+            const allPoints = block.snapPoints.map(p => p.name);
+            do { i++; newName = `input_${i}`; } while (allPoints.includes(newName));
+            branch.customSnapPoints.push({ name: newName, type: 'number', role: 'male' });
             render();
-        });
-    }
+        } else if (e.target.matches('.remove-input-btn')) {
+            const inputItem = e.target.closest('.input-item');
+            const branchIndex = parseInt(inputItem.dataset.branchIndex, 10);
+            const pointIndex = parseInt(inputItem.dataset.pointIndex, 10);
+            block.sizes[branchIndex].customSnapPoints.splice(pointIndex, 1);
+            render();
+        }
+    });
 
-    if (dom.snapPointsList) {
-        dom.snapPointsList.addEventListener('change', (event) => {
-            const target = event.target;
-            if (!target.matches('.snap-point-input') || !appState.targetID) return;
+    editor.addEventListener('change', (e) => {
+        const block = appState.blockSpace[appState.targetID];
+        if (!block) return;
 
-            const block = appState.blockSpace[appState.targetID];
-            const branchIndex = parseInt(target.dataset.branchIndex, 10);
-            const pointIndex = parseInt(target.dataset.pointIndex, 10);
-            const prop = target.dataset.prop;
-            let value = target.value.trim();
+        if (e.target.matches('.branch-name-input')) {
+            const branchIndex = parseInt(e.target.closest('.branch-item').dataset.branchIndex, 10);
+            block.sizes[branchIndex].name = e.target.value;
+            render();
+        } else if (e.target.matches('.input-prop')) {
+            const inputItem = e.target.closest('.input-item');
+            const branchIndex = parseInt(inputItem.dataset.branchIndex, 10);
+            const pointIndex = parseInt(inputItem.dataset.pointIndex, 10);
+            const prop = e.target.dataset.prop;
+            block.sizes[branchIndex].customSnapPoints[pointIndex][prop] = e.target.value;
+            render();
+        } else if (e.target.matches('.lock-toggle')) {
+            const inputName = e.target.dataset.inputName;
+            if (block.children[inputName]) {
+                block.children[inputName].locked = e.target.checked;
+                render();
+            }
+        }
+    });
 
-            if (prop === 'x' || prop === 'y') {
-                if (value.toLowerCase() !== 'center') {
-                    const numValue = parseFloat(value);
-                    value = isNaN(numValue) ? 0 : numValue;
+    let draggedElement = null;
+    editor.addEventListener('dragstart', (e) => {
+        if (e.target.matches('.branch-item, .input-item')) {
+            draggedElement = e.target;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', e.target.className);
+            setTimeout(() => e.target.classList.add('dragging'), 0);
+        }
+    });
+
+    editor.addEventListener('dragend', (e) => {
+        draggedElement?.classList.remove('dragging');
+        draggedElement = null;
+    });
+
+    editor.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (!draggedElement) return;
+        const target = e.target.closest(`.${draggedElement.className.split(' ')[0]}`);
+        if (target && target !== draggedElement) {
+            const rect = target.getBoundingClientRect();
+            if (draggedElement.matches('.branch-item')) {
+                const midway = rect.top + rect.height / 2;
+                if (e.clientY < midway) {
+                    target.parentNode.insertBefore(draggedElement, target);
                 } else {
-                    value = 'center';
+                    target.parentNode.insertBefore(draggedElement, target.nextSibling);
+                }
+            } else if (draggedElement.matches('.input-item')) {
+                const midway = rect.left + rect.width / 2;
+                if (e.clientX < midway) {
+                    target.parentNode.insertBefore(draggedElement, target);
+                } else {
+                    target.parentNode.insertBefore(draggedElement, target.nextSibling);
                 }
             }
-            
-            const newSizes = JSON.parse(JSON.stringify(block.sizes));
-            const pointToEdit = newSizes[branchIndex]?.customSnapPoints[pointIndex];
-            
-            if (pointToEdit) {
-                pointToEdit[prop] = value;
-                editBlock(appState.targetID, { sizes: newSizes });
-                render();
-            }
-        });
+        }
+    });
 
-        dom.snapPointsList.addEventListener('click', (event) => {
-            const target = event.target;
-            if (!appState.targetID) return;
-            
-            if (target.matches('.remove-snap-point')) {
-                const block = appState.blockSpace[appState.targetID];
-                const branchIndex = parseInt(target.dataset.branchIndex, 10);
-                const pointIndex = parseInt(target.dataset.pointIndex, 10);
-                const newSizes = JSON.parse(JSON.stringify(block.sizes));
-                newSizes[branchIndex].customSnapPoints.splice(pointIndex, 1);
-                editBlock(appState.targetID, { sizes: newSizes });
-                render();
-            }
-        });
-    }
+    editor.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (!draggedElement) return;
+        draggedElement.classList.remove('dragging');
+        const block = appState.blockSpace[appState.targetID];
+        if (!block) return;
 
-    if (dom.createBtn) dom.createBtn.addEventListener('click', () => createBlock(dom.typeinput.value));
-    if (dom.removeBtn) dom.removeBtn.addEventListener('click', () => { if (appState.targetID) removeBlock(appState.targetID); });
+        if (draggedElement.matches('.branch-item')) {
+            const newOrder = Array.from(editor.querySelectorAll('.branch-item')).map(item => {
+                return block.sizes[parseInt(item.dataset.branchIndex, 10)];
+            });
+            block.sizes = newOrder;
+        } else if (draggedElement.matches('.input-item')) {
+            const branchIndex = parseInt(draggedElement.closest('.branch-item').dataset.branchIndex, 10);
+            const branch = block.sizes[branchIndex];
+            const newOrder = Array.from(editor.querySelectorAll(`.input-item[data-branch-index="${branchIndex}"]`)).map(item => {
+                return branch.customSnapPoints[parseInt(item.dataset.pointIndex, 10)];
+            });
+            branch.customSnapPoints = newOrder;
+        }
+        render();
+    });
 }
 
 // --- Main Application Entry Point ---
@@ -921,11 +805,16 @@ function main() {
         console.error("The <svg id='workspace'> element was not found. Application cannot start.");
         return;
     }
-
     setupWorkspaceViewBox();
+    populateCreateDropdown();
     setupEventListeners();
-    drag.makeDraggable(dom.workSpace, appState.blockSpace, handleSnap, handleDetach, handleSelect);
+    
+    const panelHandle = document.getElementById('panel-drag-handle');
+    if (dom.controlsContainer && panelHandle) {
+        makePanelDraggable(dom.controlsContainer, panelHandle);
+    }
 
+    drag.makeDraggable(dom.workSpace, appState.blockSpace, handleSnap, handleDetach, handleSelect, getAppScale);
     createBlock("hat");
 }
 

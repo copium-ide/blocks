@@ -3,14 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>blocks</title>
+  <title>Blocks</title>
   <style>
+    /* --- General Layout & Workspace --- */
     body, html {
       margin: 0;
       padding: 0;
       overflow: hidden;
       background-color: #e0e0e0;
-      font-family: sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #333;
     }
     #workspace {
       position: absolute;
@@ -19,93 +21,184 @@
       width: 100vw;
       height: 100vh;
     }
-    #controls-container {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      background: #ffffff;
-      padding: 15px;
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-      z-index: 10;
-      width: 350px;
-      max-height: 95vh;
-      overflow-y: auto;
-    }
-    #controls-container label, #controls-container button, #controls-container input, #controls-container select {
-      display: block;
-      width: 100%;
-      box-sizing: border-box;
-      margin-bottom: 8px;
-    }
-    #controls-container h3 {
-        margin-top: 0;
-        border-bottom: 1px solid #eee;
-        padding-bottom: 5px;
-    }
-    hr { margin: 15px 0; border: 1px solid #eee; border-top: none; }
-    .branch-slider {
-      border: 1px solid #ccc;
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 4px;
-    }
-    .branch-slider h4 { margin: 0 0 10px 0; }
-    .remove-branch {
-        float: right;
-        width: 25px !important;
-        height: 25px;
-        padding: 0;
-        line-height: 25px;
-        margin: -5px -5px 0 0 !important;
-        background: #fdd;
-        border: 1px solid #f00;
-        color: #f00;
-        border-radius: 50%;
-        cursor: pointer;
-    }
-    .connection-item {
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        margin-bottom: 5px;
-    }
-    .connection-item label {
-        margin: 0;
-        display: inline-block;
-        width: auto;
-    }
-    .connection-item input[type="checkbox"] {
-        width: auto;
-        display: inline-block;
-        vertical-align: middle;
-    }
     svg[blocktype] {
         overflow: visible;
         cursor: grab;
+        filter: drop-shadow(0 1px 3px rgba(0,0,0,0.2));
+        transition: filter 0.1s ease-in-out;
+    }
+    svg[blocktype]:hover {
+        filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
     }
     svg[blocktype].active {
         cursor: grabbing;
         opacity: 0.8;
-        filter: drop-shadow(0 0 10px rgba(97, 97, 97, 0.7));
+        filter: drop-shadow(0 5px 15px rgba(0,0,0,0.4));
     }
-    .snap-point-item {
+
+    /* --- Main Controls Container --- */
+    #controls-container {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: #f8f9fa;
+      padding: 0;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 10;
+      width: 380px;
+      max-height: calc(100vh - 20px);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    #panel-drag-handle {
+        width: 100%;
+        padding: 8px;
+        background-color: #e9ecef;
+        text-align: center;
+        font-size: 1.2em;
+        letter-spacing: 5px;
+        color: #adb5bd;
+        cursor: move;
+        border-bottom: 1px solid #dee2e6;
+        flex-shrink: 0;
+    }
+    #controls-inner-content {
+        padding: 15px;
+        overflow-y: auto;
         display: flex;
-        justify-content: space-between;
+        flex-direction: column;
+        gap: 12px;
+    }
+    #controls-container h3 {
+        margin: 5px 0;
+        border-bottom: 1px solid #dee2e6;
+        padding-bottom: 8px;
+        font-size: 1.1em;
+        color: #495057;
+    }
+    #controls-container hr {
+        border: none;
+        border-top: 1px solid #dee2e6;
+        margin: 5px 0;
+    }
+    #controls-container label, #controls-container button, #controls-container input, #controls-container select {
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ced4da;
+      background-color: #fff;
+    }
+    #controls-container button {
+        background-color: #e9ecef;
+        cursor: pointer;
+        font-weight: 500;
+    }
+    #controls-container button:hover {
+        background-color: #dee2e6;
+    }
+    .control-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    .control-grid label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 0.9em;
+        color: #6c757d;
+    }
+
+    /* --- Unified Structure Editor --- */
+    #structure-editor {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .branch-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .branch-item {
+        background: #fff;
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        padding: 10px;
+        transition: box-shadow 0.2s ease;
+    }
+    .branch-item.dragging {
+        opacity: 0.5;
+        box-shadow: 0 0 15px rgba(0, 123, 255, 0.5);
+    }
+    .branch-header {
+        display: flex;
         align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+    .drag-handle {
+        cursor: grab;
+        color: #adb5bd;
+        padding: 0 5px;
+        font-family: monospace;
+        font-weight: bold;
+    }
+    .branch-name-input {
+        flex-grow: 1;
+    }
+    .remove-branch-btn, .remove-input-btn {
+        width: 30px !important;
+        height: 30px;
+        padding: 0;
+        line-height: 30px;
+        text-align: center;
+        background: #f8d7da;
+        border-color: #f5c6cb;
+        color: #721c24;
+        flex-shrink: 0;
+    }
+    .add-branch-btn {
+        background-color: #d1ecf1;
+        border-color: #bee5eb;
+        color: #0c5460;
+    }
+
+    /* --- Input Zone --- */
+    .input-zone {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        background: #f8f9fa;
+        padding: 8px;
+        border-radius: 4px;
+    }
+    .input-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+    }
+    .input-item.dragging {
+        opacity: 0.5;
+        background: #e0eaff;
+    }
+    .input-item .input-prop {
+        font-size: 0.9em;
         padding: 4px;
-        border-bottom: 1px solid #444;
     }
-    .snap-point-item.default-point {
-        color: #aaa;
-    }
-    .snap-point-controls button {
-        margin-left: 5px;
-        font-size: 0.8em;
-    }
-    .connected {
-        color: #8f8;
-        font-style: italic;
+    .add-input-btn {
+        margin-top: 5px;
+        background-color: #e2e3e5;
+        border-color: #d6d8db;
+        color: #383d41;
     }
   </style>
 </head>
@@ -114,65 +207,55 @@
     <svg id="workspace"></svg>
 
     <div id="controls-container">
-        <a href="https://discord.gg/33TUH3pxnP" target="_blank" style="text-align: center;">join my server now! :3</a>
-        <hr>
-        <div>
-            <label for="appScaleSlider">Global Scale: <span id="appScaleValue">8</span></label>
-            <input type="range" id="appScaleSlider" min="2" max="16" step="1" value="8">
-        </div>
-        <hr>
-
-        <!-- 3. Refactored Control Panel -->
-        <div id="block-selector-panel">
-            <h3>Selected Block</h3>
-            <select id="blockType"></select>
-            <button id="remove">Remove Selected</button>
-        </div>
-        <hr>
-
-        <div id="block-properties-panel" style="display: none;">
-            <h3>Block Properties</h3>
-            <label>Block Type:</label>
-            <select id="type">
-                <option>label</option>
-                <option>hat</option>
-                <option>block</option>
-                <option>end</option>
-                <option>number</option>
-                <option>string</option>
-                <option>boolean</option>
-                <option>array</option>
-                <option>object</option>
-            </select>
-            <label for="text-input">Text:</label>
-            <input type="text" id="text-input" placeholder="Enter block text...">
-            <br>
-            <label>Colors:</label>
-            <input id="color1" type="color" value="#4A90E2" />
-            <input id="color2" type="color" value="#196ECF" />
-            <div id="sliders"></div>
-            <button id="addBranch" style="display: none;">Add Branch</button>
-        </div>
-        <hr>
-
-        <div id="connection-properties-panel" style="display: none;">
-            <h3>Connections</h3>
-            <div id="connections-list"></div>
-        </div>
-        <hr>
-
-        <div id="snap-points-panel" class="panel" style="display: none;">
-            <h3>Snap Points</h3>
-            <div id="snap-points-list">
-                <!-- Snap points will be dynamically added here -->
+        <div id="panel-drag-handle">...</div>
+        
+        <div id="controls-inner-content">
+            <!-- MODIFIED: Reorganized General Controls -->
+            <div>
+                <h3>Selected Block</h3>
+                <select id="blockType"></select>
+                <button id="remove" style="margin-top: 8px;">Remove Selected</button>
             </div>
-            <button id="add-snap-point-btn">Add Custom Snap Point</button>
-        </div>
-        <hr>
+            <hr>
 
-        <div id="creation-panel">
-            <h3>Create New</h3>
-            <button id="create">Create New Block</button>
+            <!-- NEW: Integrated Create Block UI -->
+            <div>
+                <h3>Create Block</h3>
+                <div class="control-grid">
+                    <select id="new-block-type-select"></select>
+                    <button id="create">Create</button>
+                </div>
+            </div>
+            <hr>
+
+            <!-- Properties for Selected Block -->
+            <div>
+                <h3>Properties</h3>
+                <div class="control-grid">
+                    <label>Type <input type="text" id="type"></label>
+                    <label>Text <input type="text" id="text-input"></label>
+                    <label>Color 1 <input type="color" id="color1" value="#4A90E2"></label>
+                    <label>Color 2 <input type="color" id="color2" value="#196ECF"></label>
+                </div>
+            </div>
+            <hr>
+
+            <!-- The Unified Structure Editor -->
+            <div>
+                <h3>Structure</h3>
+                <div id="structure-editor">
+                    <!-- This will be populated by main.js -->
+                </div>
+            </div>
+            <hr>
+
+            <!-- Global Settings -->
+            <div>
+                <label for="appScaleSlider">Global Scale: <span id="appScaleValue">8</span></label>
+                <input type="range" id="appScaleSlider" min="2" max="16" step="1" value="8">
+            </div>
+            <hr>
+            <a href="https://discord.gg/33TUH3pxnP" target="_blank" style="text-align: center; display: block;">join my server now! :3</a>
         </div>
     </div>
 
