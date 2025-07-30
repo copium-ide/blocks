@@ -4,7 +4,7 @@ Attention developers: I've noticed this repo gets cloned quite a bit, so if you'
 <br>
 Status:
 > Extensions, done.
-> Block rendering: Incomplete (~90%)
+> Block rendering: done.
 > Code compiler: done.
 > Frontend: incomplete (~10%)
 <br>
