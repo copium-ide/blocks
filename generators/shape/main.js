@@ -87,7 +87,7 @@ function getBlockVisualDimensions(blockId) {
     if (block.type === 'label') {
         const FONT_SIZE_FOR_CALC = constants.FONT_SIZE;
         const textWidthInPixels = getTextWidth(block.text || ' ', FONT_SIZE_FOR_CALC);
-        const widthInBlockUnits = (textWidthInPixels / constants.BLOCK_WIDTH)*0.8;
+        const widthInBlockUnits = (textWidthInPixels / constants.BLOCK_WIDTH);
         return { width: widthInBlockUnits, height: 1 };
     }
 
@@ -108,7 +108,7 @@ function getBlockVisualDimensions(blockId) {
     return { width: maxWidthUnits, height: totalHeightUnits };
 }
 
-
+// --- CHANGED: This entire function has been replaced with the corrected version. ---
 function recalculateAllLayouts() {
     const PADDING_AROUND_INPUTS = 0.2;
     const BASE_HORIZONTAL_PADDING = 0.2;
@@ -138,6 +138,33 @@ function recalculateAllLayouts() {
         if (!block) return;
 
         Object.values(block.children).forEach(c => processBlockSize(c.id));
+
+        // --- START OF FIX ---
+        // This logic now applies padding in a visually consistent way.
+        if (block.type === 'label') {
+            if (block.sizes && block.sizes[0] && block.sizes[0].auto.width) {
+                // A constant padding in pre-scaled pixels. This provides a consistent visual margin.
+                const HORIZONTAL_PADDING_PIXELS = 12;
+
+                // Step 1: Calculate the final on-screen pixel size for the font.
+                const fontSizeForMeasurement = constants.FONT_SIZE * getAppScale();
+
+                // Step 2: Measure the text width in final on-screen pixels.
+                const textWidthInFinalPixels = getTextWidth(block.text || ' ', fontSizeForMeasurement);
+
+                // Step 3: Convert the final pixel width back to pre-scaled pixels.
+                const textWidthInPreScaledPixels = textWidthInFinalPixels / getAppScale();
+
+                // Step 4: Add the fixed pixel padding to the pre-scaled text width.
+                const paddedWidthInPreScaledPixels = textWidthInPreScaledPixels + HORIZONTAL_PADDING_PIXELS;
+
+                // Step 5: Convert the total padded pre-scaled pixel width into abstract Block Units.
+                block.sizes[0].width = paddedWidthInPreScaledPixels / constants.BLOCK_WIDTH;
+            }
+            sized.add(blockId);
+            return;
+        }
+        // --- END OF FIX ---
 
         if (block.sizes?.some(s => s.loop)) {
             block.sizes.forEach((branch, i) => {
@@ -243,8 +270,6 @@ function recalculateAllLayouts() {
                 totalInputWidth += (inputs.length - 1) * (PADDING_BETWEEN_INPUTS * constants.BLOCK_WIDTH);
             }
 
-            // CHANGED: Replaced the centering calculation with 0.
-            // This makes the first input start at the far left of the content area.
             let currentX = 0;
 
             inputs.forEach((point, pointIndex) => {
@@ -266,6 +291,7 @@ function recalculateAllLayouts() {
 
     topLevelBlocks.forEach(block => processBlockPosition(block.uuid));
 }
+
 
 // --- Rendering Logic (Reads from state, writes to DOM) ---
 
@@ -325,8 +351,6 @@ function generateShape(uuid, type, colors, sizes, snapPoints, text) {
         shapeGroup.classList.add('unconnected-point-shape');
         shapeGroup.style.pointerEvents = 'none';
         
-        // CHANGED: Removed the multiplication by 'scale'. 
-        // The dx and dy values are already in the correct coordinate space.
         shapeGroup.setAttribute('transform', `translate(${dx}, ${dy})`);
 
         // e. Generate the placeholder's SVG path into a temporary element
