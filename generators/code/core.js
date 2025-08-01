@@ -3,7 +3,7 @@ export const modules = {};
 export let project = {};
 
 
-export async function importFromRawUrl(url) {
+async function importFromRawUrl(url) {
   try {
     const response = await fetch(url);
     if (!response.ok) {
