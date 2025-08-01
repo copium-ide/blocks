@@ -2,6 +2,7 @@ import * as blocks from './blocks.js';
 import * as svg from './svg.js';
 import * as drag from './drag.js';
 import * as constants from './constants.js';
+import * as project from '../code/core.js';
 
 // --- Configuration ---
 let appScale = 8;
