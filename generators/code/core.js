@@ -1,13 +1,9 @@
-// --- STATE MANAGEMENT (Unchanged) ---
 export const modulePaths = [];
 export const modules = {};
 export let project = {};
 
-/**
- * A reusable helper to import from raw GitHub URLs.
- */
-async function importFromRawUrl(url) {
-  // ... (The helper function from above) ...
+
+export async function importFromRawUrl(url) {
   try {
     const response = await fetch(url);
     if (!response.ok) {
@@ -25,19 +21,18 @@ async function importFromRawUrl(url) {
   }
 }
 
-// --- CORE LOGIC (Updated) ---
+
 
 export async function processProject(url) {
     clearState();
 
-    // MODIFICATION: Use the helper for the main project file.
     const projModule = await importFromRawUrl(url); 
 
     if (!projModule.data || !projModule.data.project) {
         throw new Error("Project file is invalid. It must be an ES module with a named export 'data' containing a 'project' object.");
     }
 
-    project = projModule.data; // Note: Corrected to access project object
+    project = projModule.data;
 
     // Collect all module dependencies from the project data.
     const projectModules = project.modules || [];
@@ -50,29 +45,21 @@ export async function processProject(url) {
     await importModules();
 }
 
-/**
- * Resets the shared state. (Unchanged)
- */
+
 function clearState() {
     modulePaths.length = 0;
     for (const key in modules) { delete modules[key]; }
     delete project.project;
 }
 
-/**
- * Adds a module path to the list. (Unchanged)
- */
+
 function updateImports(path) {
     if (!modulePaths.includes(path)) {
         modulePaths.push(path);
     }
 }
 
-/**
- * Imports all modules listed in the modulePaths array. (Updated)
- */
 async function importModules() {
-    // MODIFICATION: Use the helper for each dependency.
     const importPromises = modulePaths.map(path => importFromRawUrl(path));
 
     const results = await Promise.allSettled(importPromises);
@@ -99,15 +86,12 @@ async function importModules() {
             }
         } 
         else {
-            // The error is already logged in importFromRawUrl, but we can add context.
             console.error(`The import process for module at ${path} failed.`);
         }
     });
 }
 
-/**
- * A utility function to retrieve and execute a block function. (Unchanged)
- */
+
 export function Generate(author, namespace, func, args) {
     if (!modules[author] || !modules[author][namespace] || !modules[author][namespace].blocks[func]) {
         throw new Error(`Generate failed: Block '${func}' not found in module '${author}/${namespace}'.`);
